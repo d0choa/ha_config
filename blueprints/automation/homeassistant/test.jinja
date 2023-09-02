@@ -7,24 +7,25 @@ Longitude: {{ state_attr(zone_entity, 'longitude') | round(1) }}
 {%- if weather_entity is defined %}
 {%- set forecast= state_attr(weather_entity, 'forecast')[0] %}
 {%- set temperature_unit = state_attr(weather_entity,'temperature_unit') -%}
-Weather: {{ forecast.condition }} ({{ forecast.temperature}}{{ temperature_unit }}, {{ forecast.precipitation }}% precipitation)
+Weather: {{ forecast.condition }} ({{ forecast.temperature}}{{ temperature_unit }}, {{ forecast.precipitation }}%
+precipitation)
 {%-endif %}
 
 Calendar \"{{ state_attr(calendar_entity, 'friendly_name') }}\"events for the next {{ calendar_duration.hours }}:
 {%- if agenda.events %}
 \ {%- for event in agenda.events %}
-  - Summary: {{ event.summary }}
-    Start-End:
+- Summary: {{ event.summary }}
+Start-End:
 {% if event.start is defined %}{{ event.start }} to {{ event.end }}{% else %}All Day{% endif %}
-    {%- if event.descripton is defined %}
-    Descripton: {{ event.descripton }}
-    {% endif -%}
-    {%- if event.location is defined %}
-      Location: {{ event.location }}
-    {% endif -%}
-  {%- endfor %}
+{%- if event.descripton is defined %}
+Descripton: {{ event.descripton }}
+{% endif -%}
+{%- if event.location is defined %}
+Location: {{ event.location }}
+{% endif -%}
+{%- endfor %}
 {%- else %}
-  - No upcoming events.
+- No upcoming events.
 {%- endif %}
 
 {{ prompt }}

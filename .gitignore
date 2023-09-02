@@ -8,7 +8,6 @@
 *.key
 .cloud
 .google.token
-.HA_VERSION
 .storage
 .uuid
 icloud/

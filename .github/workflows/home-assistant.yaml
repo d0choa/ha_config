@@ -1,6 +1,15 @@
 name: Check
 on: [push, pull_request]
 jobs:
+  yamllint:
+    name: 🧹 yamllint
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⤵️ Check out configuration from GitHub
+        uses: actions/checkout@v3.6.0
+      - name: 🚀 Run yamllint
+        uses: frenck/action-yamllint@v1.4.1
+
   home-assistant:
     name: Home Assistant Core Configuration Check
     runs-on: ubuntu-latest

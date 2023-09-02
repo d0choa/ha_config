@@ -1,12 +1,10 @@
-# Configure a default setup of Home Assistant (frontend, api, etc)
-default_config:
+---
+# Welcome to my Home Assistant configuration!
+#
 
-automation: !include automations.yaml
-script: !include scripts.yaml
-scene: !include scenes.yaml
-switch: !include switches.yaml
-sensor: !include sensors.yaml
-light: !include light-groups.yaml
+homeassistant:
+  # Load packages
+  packages: !include_dir_named integrations
 
 #sonoff
 sonoff:
@@ -21,10 +19,6 @@ eufy_vacuum:
       id: !secret eufy_id
       type: T2118
 
-# MariaDB
-recorder:
-  db_url: mysql://homeassistant:homeassistantpasswd@core-mariadb/homeassistant?charset=utf8mb4
-
 # Example configuration.yaml entry for Tado
 device_tracker:
   - platform: tado
@@ -37,12 +31,6 @@ withings:
   client_id: !secret withings_client_id
   client_secret: !secret withings_client_secret
   use_webhook: true
-
-# certificates for SSL
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 172.30.33.0/24
 
 calendar:
   - platform: caldav

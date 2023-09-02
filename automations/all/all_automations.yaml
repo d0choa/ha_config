@@ -1,3 +1,4 @@
+---
 - id: "1636311624815"
   alias: Encender garaje
   description: Encender sonoff switch cuando detecte movimiento

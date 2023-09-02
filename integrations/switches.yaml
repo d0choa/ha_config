@@ -1,3 +1,4 @@
+---
 switch:
   - platform: template
     switches:

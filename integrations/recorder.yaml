@@ -1,3 +1,4 @@
+---
 # MariaDB
 recorder:
   db_url: mysql://homeassistant:homeassistantpasswd@core-mariadb/homeassistant?charset=utf8mb4

@@ -6,10 +6,10 @@ homeassistant:
   # Load packages
   packages: !include_dir_named integrations
 
-#sonoff
-sonoff:
-  username: !secret sonoff_username
-  password: !secret sonoff_password
+# # sonoff
+# sonoff:
+#   username: !secret sonoff_username
+#   password: !secret sonoff_password
 
 eufy_vacuum:
   devices:

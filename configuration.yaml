@@ -11,13 +11,13 @@ homeassistant:
 #   username: !secret sonoff_username
 #   password: !secret sonoff_password
 
-eufy_vacuum:
-  devices:
-    - name: Robovac
-      address: !secret eufy_address
-      access_token: !secret eufy_access_token
-      id: !secret eufy_id
-      type: T2118
+# eufy_vacuum:
+#   devices:
+#     - name: Robovac
+#       address: !secret eufy_address
+#       access_token: !secret eufy_access_token
+#       id: !secret eufy_id
+#       type: T2118
 
 # Example configuration.yaml entry for Tado
 device_tracker:

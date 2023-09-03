@@ -106,7 +106,7 @@ request:
       required: false
       advanced: false
       example: '{ "togglex": { "onoff": 0, "channel": 0 } }'
-      default: '{}'
+      default: "{}"
       selector:
         text:
     notifyresponse:

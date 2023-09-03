@@ -451,69 +451,69 @@
       entity_id: switch.enchufe_jardin_outlet_3
       domain: switch
   mode: single
-- id: "1672871319378"
-  alias: Camera thumbnail
-  description:
-    Capture Image on Trigger, Send Mobile Notification with Actions, Snooze
-    or Alarm via Actions
-  trigger:
-    - platform: state
-      entity_id:
-        - binary_sensor.presence_7
-      to: "on"
-      id: sensor
-    - platform: event
-      event_type: mobile_app_notification_action
-      id: snooze
-      event_data:
-        action: SNOOZE
-    - platform: event
-      event_type: mobile_app_notification_action
-      id: alarm
-      event_data:
-        action: ALARM
-  condition: []
-  action:
-    - choose:
-        - conditions:
-            - condition: trigger
-              id: sensor
-          sequence:
-            - service: eufy_security.start_rtsp_livestream
-              data: {}
-            - service: eufy_security.stop_rtsp_livestream
-              data: {}
-            - service: notify.mobile_app_iphone_160
-              data:
-                message: Motion detected
-                data:
-                  image: /api/camera_proxy/camera.entryway
-                  actions:
-                    - action: ALARM
-                      title: Alarm
-                    - action: SNOOZE
-                      title: Snooze
-        - conditions:
-            - condition: trigger
-              id: snooze
-          sequence:
-            - service: eufy_security.snooze
-              data:
-                snooze_time: 10
-                snooze_chime: false
-                snooze_motion: true
-                snooze_homebase: false
-              target:
-                entity_id: camera.entryway
-        - conditions:
-            - condition: trigger
-              id: alarm
-          sequence:
-            - service: alarm_control_panel.alarm_trigger
-              data: {}
-              target:
-                entity_id: alarm_control_panel.entryway
-  mode: single
+# - id: "1672871319378"
+#   alias: Camera thumbnail
+#   description:
+#     Capture Image on Trigger, Send Mobile Notification with Actions, Snooze
+#     or Alarm via Actions
+#   trigger:
+#     - platform: state
+#       entity_id:
+#         - binary_sensor.presence_7
+#       to: "on"
+#       id: sensor
+#     - platform: event
+#       event_type: mobile_app_notification_action
+#       id: snooze
+#       event_data:
+#         action: SNOOZE
+#     - platform: event
+#       event_type: mobile_app_notification_action
+#       id: alarm
+#       event_data:
+#         action: ALARM
+#   condition: []
+#   action:
+#     - choose:
+#         - conditions:
+#             - condition: trigger
+#               id: sensor
+#           sequence:
+#             - service: eufy_security.start_rtsp_livestream
+#               data: {}
+#             - service: eufy_security.stop_rtsp_livestream
+#               data: {}
+#             - service: notify.mobile_app_iphone_160
+#               data:
+#                 message: Motion detected
+#                 data:
+#                   image: /api/camera_proxy/camera.entryway
+#                   actions:
+#                     - action: ALARM
+#                       title: Alarm
+#                     - action: SNOOZE
+#                       title: Snooze
+#         - conditions:
+#             - condition: trigger
+#               id: snooze
+#           sequence:
+#             - service: eufy_security.snooze
+#               data:
+#                 snooze_time: 10
+#                 snooze_chime: false
+#                 snooze_motion: true
+#                 snooze_homebase: false
+#               target:
+#                 entity_id: camera.entryway
+#         - conditions:
+#             - condition: trigger
+#               id: alarm
+#           sequence:
+#             - service: alarm_control_panel.alarm_trigger
+#               data: {}
+#               target:
+#                 entity_id: alarm_control_panel.entryway
+#   mode: single
 - id: "1686850527116"
   alias: Charging on
   description: ""

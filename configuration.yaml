@@ -1,37 +1,6 @@
 ---
 # Welcome to my Home Assistant configuration!
 #
-
 homeassistant:
   # Load packages
   packages: !include_dir_named integrations
-
-# # sonoff
-# sonoff:
-#   username: !secret sonoff_username
-#   password: !secret sonoff_password
-
-# eufy_vacuum:
-#   devices:
-#     - name: Robovac
-#       address: !secret eufy_address
-#       access_token: !secret eufy_access_token
-#       id: !secret eufy_id
-#       type: T2118
-
-# Example configuration.yaml entry for Tado
-device_tracker:
-  - platform: tado
-    username: !secret tado_username
-    password: !secret tado_password
-    home_id: !secret tado_home_id
-
-# Withings
-withings:
-  use_webhook: true
-
-calendar:
-  - platform: caldav
-    username: !secret calendar_username
-    password: !secret calendar_password
-    url: https://caldav.icloud.com

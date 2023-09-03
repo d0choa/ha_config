@@ -4,3 +4,7 @@ calendar:
       - name: "Bin Collection"
         url: "https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801"
         include_all_day: True
+  - platform: caldav
+    username: !secret calendar_username
+    password: !secret calendar_password
+    url: https://caldav.icloud.com

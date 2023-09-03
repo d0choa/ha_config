@@ -44,9 +44,6 @@ home-assistant.log.*
 ozw_log.txt
 ffmpeg-*.log
 
-# Development files
-custom_components
-
 # End of https://www.toptal.com/developers/gitignore/api/homeassistant
 
 .sonoff.json

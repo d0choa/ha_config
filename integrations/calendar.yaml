@@ -1,0 +1,6 @@
+calendar:
+  - platform: ics_calendar
+    calendars:
+      - name: "Bin Collection"
+        url: "https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801"
+        include_all_day: True

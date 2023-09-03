@@ -1,23 +1,23 @@
 ---
 # Bin Collections
-sensor:
-  - platform: ics
-    name: Black Bin Collection
-    id: 1
-    url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
-    startswith: Black
-    icon: mdi:delete
+# sensor:
+#   - platform: ics
+#     name: Black Bin Collection
+#     id: 1
+#     url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
+#     startswith: Black
+#     icon: mdi:delete
 
-  - platform: ics
-    name: Green Bin Collection
-    id: 2
-    url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
-    startswith: Green
-    icon: mdi:leaf
+#   - platform: ics
+#     name: Green Bin Collection
+#     id: 2
+#     url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
+#     startswith: Green
+#     icon: mdi:leaf
 
-  - platform: ics
-    name: Blue Bin Collection
-    id: 3
-    url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
-    startswith: Blue
-    icon: mdi:recycle
+#   - platform: ics
+#     name: Blue Bin Collection
+#     id: 3
+#     url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
+#     startswith: Blue
+#     icon: mdi:recycle

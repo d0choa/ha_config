@@ -152,7 +152,7 @@
       domain: binary_sensor
       for:
         hours: 0
-        minutes: 10
+        minutes: 6
         seconds: 0
   condition: []
   action:

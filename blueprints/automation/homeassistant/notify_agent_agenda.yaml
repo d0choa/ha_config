@@ -71,8 +71,6 @@ blueprint:
         text.
 
         This should be a OpenAI conversation agent for this Blueprint to work."
-      selector:
-        conversation_agent: {}
     prompt:
       name: Conversation agent prompt
       selector:

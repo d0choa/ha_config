@@ -1,3 +1,4 @@
+---
 blueprint:
   name: Conversation agent agenda notification
   description:
@@ -18,15 +19,15 @@ blueprint:
       selector:
         text: {}
       default: notify.notify
-    step_counter:
-      name: Step counts
-      description: Entity capturing step counts
-      selector:
-        entity:
-          multiple: false
-          filter:
-            - domain:
-                - sensor
+    # step_counter:
+    #   name: Step counts
+    #   description: Entity capturing step counts
+    #   selector:
+    #     entity:
+    #       multiple: false
+    #       filter:
+    #         - domain:
+    #             - sensor
     calendar_entity:
       name: Calendar
       description: The calendar entity to use for finding upcoming calendar events.
@@ -70,8 +71,6 @@ blueprint:
         text.
 
         This should be a OpenAI conversation agent for this Blueprint to work."
-      selector:
-        conversation_agent: {}
     prompt:
       name: Conversation agent prompt
       selector:
@@ -99,7 +98,7 @@ action:
       zone_entity: !input zone_entity
       calendar_duration: !input calendar_duration
       prompt: !input prompt
-      step_counter: !input step_counter
+      # step_counter: !input step_counter
   - alias: Fetch Calendar Agenda
     service: calendar.list_events
     data:

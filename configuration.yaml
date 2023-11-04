@@ -1,51 +1,6 @@
-# Configure a default setup of Home Assistant (frontend, api, etc)
-default_config:
-
-automation: !include automations.yaml
-script: !include scripts.yaml
-scene: !include scenes.yaml
-switch: !include switches.yaml
-sensor: !include sensors.yaml
-light: !include light-groups.yaml
-
-#sonoff
-sonoff:
-  username: !secret sonoff_username
-  password: !secret sonoff_password
-
-eufy_vacuum:
-  devices:
-    - name: Robovac
-      address: !secret eufy_address
-      access_token: !secret eufy_access_token
-      id: !secret eufy_id
-      type: T2118
-
-# MariaDB
-recorder:
-  db_url: mysql://homeassistant:homeassistantpasswd@core-mariadb/homeassistant?charset=utf8mb4
-
-# Example configuration.yaml entry for Tado
-device_tracker:
-  - platform: tado
-    username: !secret tado_username
-    password: !secret tado_password
-    home_id: !secret tado_home_id
-
-# Withings
-withings:
-  client_id: !secret withings_client_id
-  client_secret: !secret withings_client_secret
-  use_webhook: true
-
-# certificates for SSL
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 172.30.33.0/24
-
-calendar:
-  - platform: caldav
-    username: !secret calendar_username
-    password: !secret calendar_password
-    url: https://caldav.icloud.com
+---
+# Welcome to my Home Assistant configuration!
+#
+homeassistant:
+  # Load packages
+  packages: !include_dir_named integrations

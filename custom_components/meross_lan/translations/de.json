@@ -1,0 +1,182 @@
+{
+    "entity": {
+        "climate": {
+            "mts_climate": {
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "off": "Aus",
+                            "custom": "Manuell",
+                            "comfort": "Komfort (wärme)",
+                            "sleep": "Schlaf (kühl)",
+                            "away": "Abwesend (wirtschaft)",
+                            "auto": "Automatisch"
+                        }
+                    }
+                }
+            }
+        },
+        "sensor": {
+            "smoke_alarm_status": {
+                "state": {
+                    "error_temperature": "Fehler: Temperatursensor",
+                    "error_smoke": "Fehler: Rauchsensor",
+                    "error_battery": "Fehler: Batterie",
+                    "alarm_test": "Wecker: Test",
+                    "alarm_temperature_high": "Alarm: Hohe Temperatur",
+                    "alarm_smoke": "Alarm: Rauch",
+                    "ok": "Keine Probleme"
+                }
+            },
+            "mts200_overheat_warning": {
+                "state": {
+                    "ok": "Ok",
+                    "overheating": "Überhitzung",
+                    "disconnected": "Getrennt"
+                }
+            }
+        }
+    },
+    "config": {
+        "flow_title": "{name}",
+        "abort": {
+            "already_configured": "Eintrag bereits konfiguriert",
+            "no_devices_found": "Keine Geräte im Netzwerk gefunden",
+            "single_instance_allowed": "Das Gerät ist bereits vorhanden. Jedes Gerät kann nur ein mal konfiguriert werden."
+        },
+        "error": {
+            "already_configured_device": "Das Gerät ist bereits vorhanden",
+            "cannot_connect": "Verbindung nicht möglich",
+            "cloud_profile_mismatch": "Das Cloud-Profil stimmt nicht mit der Konfiguration überein",
+            "invalid_auth": "Fehlerhafte Zugangsdaten",
+            "invalid_key": "Geräteschlüssel fehlerhaft: Wählen Sie 'Cloud retrieve' um von Meross zu kommen",
+            "invalid_nullkey": "Geräteschlüssel fehlerhaft: Wählen Sie 'Hack mode' um einen leeren Schlüssel zuzulassen"
+        },
+        "step": {
+            "user": {
+                "title": "Option wählen",
+                "description": "",
+                "menu_options": {
+                    "profile": "Registrieren Sie ein Meross-Cloud-Profil",
+                    "device": "Konfigurieren Sie ein Gerät manuell"
+                }
+            },
+            "hub": {
+                "title": "Meross LAN MQTT Hub",
+                "description": "Allgemeine Meross LAN Einstellungen",
+                "data": {
+                    "key": "Geräteschlüssel"
+                }
+            },
+            "device": {
+                "description": "Meross Gerät einrichten\nTyp: {device_type}\nUUID: {device_id}",
+                "data": {
+                    "host": "IP-Adresse des Geräts",
+                    "key": "Geräteschlüssel"
+                }
+            },
+            "keyerror": {
+                "title": "Geräteschlüsselfehler",
+                "description": "Der bereitgestellte Schlüssel ist falsch. Wähle eine Option",
+                "menu_options": {
+                    "profile": "Aus der Meross-Cloud abrufen",
+                    "device": "Wiederholen"
+                }
+            },
+            "profile": {
+                "title": "Geräteschlüssel übertragen",
+                "description": "Bitte einloggen um den Geräteschlüssel aus Ihrem Meross Account zu übertragen",
+                "data": {
+                    "email": "Meross Benutzername",
+                    "password": "Meross Passwort",
+                    "save_password": "Passwort speichern",
+                    "allow_mqtt_publish": "Cloud-MQTT-Veröffentlichung zulassen",
+                    "check_firmware_updates": "Überprüfen Sie Firmware-Updates",
+                    "create_diagnostic_entities": "Erstellen Sie Diagnoseeinheiten"
+                }
+            },
+            "finalize": {
+                "title": "Gerätekonfiguration",
+                "description": "Typ: {device_type}\nUUID: {device_id}",
+                "data": {}
+            }
+        }
+    },
+    "options": {
+        "error": {
+            "already_configured_device": "Das Gerät ist bereits vorhanden",
+            "cannot_connect": "Verbindung nicht möglich",
+            "cloud_profile_mismatch": "Das Cloud-Profil stimmt nicht mit der Konfiguration überein",
+            "device_id_mismatch": "Nicht übereinstimmende Geräte-UUID: Das Gerät ist nicht dasselbe",
+            "invalid_auth": "Fehlerhafte Zugangsdaten",
+            "invalid_key": "Geräteschlüssel fehlerhaft: Wählen Sie 'Cloud retrieve' um von Meross zu kommen",
+            "invalid_nullkey": "Geräteschlüssel fehlerhaft: Wählen Sie 'Hack mode' um einen leeren Schlüssel zuzulassen"
+        },
+        "step": {
+            "hub": {
+                "title": "Meross LAN MQTT Hub",
+                "description": "Allgemeine Meross LAN Einstellungen",
+                "data": {
+                    "key": "Geräteschlüssel"
+                }
+            },
+            "device": {
+                "title": "Gerätekonfiguration",
+                "description": "Typ: {device_type}\nUUID: {device_id}\nHost: {host}",
+                "data": {
+                    "host": "IP-Adresse des Geräts",
+                    "key": "Geräteschlüssel",
+                    "protocol": "Verbindungsart",
+                    "profile_id": "Cloud-Profil",
+                    "polling_period": "Abfragerate",
+                    "timezone": "Gerätezeitzone",
+                    "trace": "Debugmodus aktivieren",
+                    "trace_timeout": "Debug tracing duration (sec)",
+                    "all": "Appliance.System.All",
+                    "ability": "Appliance.System.Ability"
+                }
+            },
+            "keyerror": {
+                "title": "Geräteschlüsselfehler",
+                "description": "Der bereitgestellte Schlüssel ist falsch. Wähle eine Option",
+                "menu_options": {
+                    "profile": "Aus der Meross-Cloud abrufen",
+                    "device": "Wiederholen"
+                }
+            },
+            "profile": {
+                "title": "Geräteschlüssel übertragen",
+                "description": "Bitte einloggen um den Geräteschlüssel aus Ihrem Meross Account zu übertragen",
+                "data": {
+                    "email": "Meross Benutzername",
+                    "password": "Meross Passwort",
+                    "save_password": "Passwort speichern",
+                    "allow_mqtt_publish": "Cloud-MQTT-Veröffentlichung zulassen",
+                    "check_firmware_updates": "Überprüfen Sie Firmware-Updates",
+                    "create_diagnostic_entities": "Erstellen Sie Diagnoseeinheiten"
+                }
+            }
+        }
+    },
+    "issues": {
+        "cloud_token_expired": {
+            "title": "Cloud-Token für {email} abgelaufen",
+            "fix_flow": {
+                "step": {
+                    "profile": {
+                        "title": "Geräteschlüssel übertragen",
+                        "description": "Bitte einloggen um den Geräteschlüssel aus Ihrem Meross Account zu übertragen",
+                        "data": {
+                            "email": "Meross Benutzername",
+                            "password": "Meross Passwort",
+                            "save_password": "Passwort speichern",
+                            "allow_mqtt_publish": "Cloud-MQTT-Veröffentlichung zulassen",
+                            "check_firmware_updates": "Überprüfen Sie Firmware-Updates",
+                            "create_diagnostic_entities": "Erstellen Sie Diagnoseeinheiten"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

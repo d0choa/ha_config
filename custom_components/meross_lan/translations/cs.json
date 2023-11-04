@@ -1,0 +1,183 @@
+{
+    "entity": {
+        "climate": {
+            "mts_climate": {
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "off": "Vypnuto",
+                            "custom": "Ruční",
+                            "comfort": "Komfort (teplo)",
+                            "sleep": "Spánek (v pohodě)",
+                            "away": "Pryč (ekonomika)",
+                            "auto": "Automatický"
+                        }
+                    }
+                }
+            }
+        },
+        "sensor": {
+            "smoke_alarm_status": {
+                "state": {
+                    "error_temperature": "Chyba: Snímač teploty",
+                    "error_smoke": "Chyba: Snímač kouře",
+                    "error_battery": "Chyba: Baterie",
+                    "alarm_test": "Alarm: Test",
+                    "alarm_temperature_high": "Alarm: Vysoká teplota",
+                    "alarm_smoke": "Alarm: Kouř",
+                    "ok": "Žádné problémy"
+                }
+            },
+            "mts200_overheat_warning": {
+                "state": {
+                    "ok": "Ok",
+                    "overheating": "Přehřívání",
+                    "disconnected": "Odpojeno"
+                }
+            }
+        }
+    },
+    "config": {
+        "flow_title": "{name}",
+        "abort": {
+            "already_configured": "Vstup je již nakonfigurován",
+            "no_devices_found": "V síti nebylo nalezeno žádné zařízení",
+            "single_instance_allowed": "Konfigurace již existuje. Více konfigurací není podporováno."
+        },
+        "error": {
+            "already_configured_device": "Zařízení již bylo konfigurováno",
+            "cannot_connect": "Pokus o připojení se nezdařil",
+            "cloud_profile_mismatch": "Cloudový profil neodpovídá konfiguraci",
+            "invalid_auth": "Ověření selhalo",
+            "invalid_key": "Neplatný klíč: select 'Cloud retrieve' to get from Meross",
+            "invalid_nullkey": "Neplatný klíč: select 'Hack mode' to allow empty key"
+        },
+        "step": {
+            "user": {
+                "title": "Vyberte možnost",
+                "description": "",
+                "menu_options": {
+                    "profile": "Zaregistrujte si cloudový profil Meross",
+                    "device": "Ručně nakonfigurujte zařízení"
+                }
+            },
+            "hub": {
+                "title": "Centrum Meross LAN MQTT",
+                "description": "Globální konfigurace nastavení Meross LAN",
+                "data": {
+                    "key": "Klíč zařízení"
+                }
+            },
+            "device": {
+                "description": "Nastavení zařízení Meross\nTyp: {device_type}\nUUID: {device_id}",
+                "data": {
+                    "host": "Adresa hostitele zařízení",
+                    "key": "Klíč zařízení",
+                    "Required": "Povinné pole"
+                }
+            },
+            "keyerror": {
+                "title": "Chyba klíče zařízení",
+                "description": "Zadaný klíč je nesprávný. Vyberte možnost",
+                "menu_options": {
+                    "profile": "Načíst z cloudu Meross",
+                    "device": "Zkuste to znovu"
+                }
+            },
+            "profile": {
+                "title": "Obnova klíče zařízení",
+                "description": "Přihlaste se k účtu Meross a obnovte klíč zařízení",
+                "data": {
+                    "email": "Uživatelské jméno účtu Meross",
+                    "password": "Heslo k účtu Meross",
+                    "save_password": "Uložit heslo",
+                    "allow_mqtt_publish": "Povolit cloudové publikování MQTT",
+                    "check_firmware_updates": "Zkontrolujte aktualizace firmwaru",
+                    "create_diagnostic_entities": "Vytvářejte diagnostické entity"
+                }
+            },
+            "finalize": {
+                "title": "Konfigurace zařízení",
+                "description": "Typ: {device_type}\nIdentifikátor UUID: {device_id}",
+                "data": {}
+            }
+        }
+    },
+    "options": {
+        "error": {
+            "already_configured_device": "Zařízení již bylo konfigurováno",
+            "cannot_connect": "Pokus o připojení se nezdařil",
+            "cloud_profile_mismatch": "Cloudový profil neodpovídá konfiguraci",
+            "device_id_mismatch": "Neshoda UUID zařízení: zařízení není stejné",
+            "invalid_auth": "Ověření selhalo",
+            "invalid_key": "Neplatný klíč: select 'Cloud retrieve' to get from Meross",
+            "invalid_nullkey": "Neplatný klíč: select 'Hack mode' to allow empty key"
+        },
+        "step": {
+            "hub": {
+                "title": "Centrum Meross LAN MQTT",
+                "description": "Globální konfigurace nastavení Meross LAN",
+                "data": {
+                    "key": "Klíč zařízení"
+                }
+            },
+            "device": {
+                "title": "Konfigurace zařízení",
+                "description": "Typ: {device_type}\nIdentifikátor UUID: {device_id}\nHostitel: {host}",
+                "data": {
+                    "host": "Adresa hostitele zařízení",
+                    "key": "Klíč zařízení",
+                    "protocol": "Protokol připojení",
+                    "profile_id": "Cloudový profil",
+                    "polling_period": "Interval dotazování",
+                    "timezone": "Časové pásmo zařízení",
+                    "trace": "Zapnout ladění zařízení",
+                    "trace_timeout": "Debug tracing duration (sec)",
+                    "all": "Appliance.System.All",
+                    "ability": "Appliance.System.Ability"
+                }
+            },
+            "keyerror": {
+                "title": "Chyba klíče zařízení",
+                "description": "Zadaný klíč je nesprávný. Vyberte možnost",
+                "menu_options": {
+                    "profile": "Načíst z cloudu Meross",
+                    "device": "Zkuste to znovu"
+                }
+            },
+            "profile": {
+                "title": "Obnova klíče zařízení",
+                "description": "Přihlaste se k účtu Meross a obnovte klíč zařízení",
+                "data": {
+                    "email": "Uživatelské jméno účtu Meross",
+                    "password": "Heslo k účtu Meross",
+                    "save_password": "Uložit heslo",
+                    "allow_mqtt_publish": "Povolit cloudové publikování MQTT",
+                    "check_firmware_updates": "Zkontrolujte aktualizace firmwaru",
+                    "create_diagnostic_entities": "Vytvářejte diagnostické entity"
+                }
+            }
+        }
+    },
+    "issues": {
+        "cloud_token_expired": {
+            "title": "Platnost cloudového tokenu pro {email} vypršela",
+            "fix_flow": {
+                "step": {
+                    "profile": {
+                        "title": "Obnova klíče zařízení",
+                        "description": "Přihlaste se k účtu Meross a obnovte klíč zařízení",
+                        "data": {
+                            "email": "Uživatelské jméno účtu Meross",
+                            "password": "Heslo k účtu Meross",
+                            "save_password": "Uložit heslo",
+                            "allow_mqtt_publish": "Povolit cloudové publikování MQTT",
+                            "check_firmware_updates": "Zkontrolujte aktualizace firmwaru",
+                            "create_diagnostic_entities": "Vytvářejte diagnostické entity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

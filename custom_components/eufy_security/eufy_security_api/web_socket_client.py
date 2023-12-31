@@ -39,7 +39,7 @@ class WebSocketClient:
     async def connect(self):
         """Set up web socket connection"""
         try:
-            self.socket = await self.session.ws_connect(f"ws://{self.host}:{self.port}", autoclose=False, autoping=True, heartbeat=60)
+            self.socket = await self.session.ws_connect(f"ws://{self.host}:{self.port}", heartbeat=10, compress=9)
         except Exception as exc:
             raise WebSocketConnectionException("Connection to add-on was broken. please reload the integration!") from exc
         self.task = self.loop.create_task(self._process_messages())
@@ -48,12 +48,12 @@ class WebSocketClient:
 
     async def disconnect(self):
         """Close web socket connection"""
-        if self.socket is not None:
-            await self.socket.close()
-            self.socket = None
         if self.task is not None:
             self.task.cancel()
             self.task = None
+        if self.socket is not None:
+            await self.socket.close()
+            self.socket = None
 
     async def _on_open(self) -> None:
         if self.open_callback is not None:

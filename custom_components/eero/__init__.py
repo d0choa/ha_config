@@ -16,7 +16,6 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -396,7 +395,7 @@ class EeroEntity(CoordinatorEntity):
         return f"{self.network.id}-{self.resource.id}-{self.entity_description.key}"
 
     @property
-    def device_info(self) -> DeviceInfo:
+    def device_info(self) -> dr.DeviceInfo:
         """Return device specific attributes.
 
         Implemented by platform classes.
@@ -414,7 +413,15 @@ class EeroEntity(CoordinatorEntity):
             model = MODEL_CLIENT
             name = self.resource.name_connection_type
 
-        suggested_area, sw_version, hw_version, via_device = None, None, None, None
+        entry_type, suggested_area, sw_version, hw_version, via_device = None, None, None, None, None
+        if any(
+            [
+                self.resource.is_backup_network,
+                self.resource.is_network,
+                self.resource.is_profile,
+            ]
+        ):
+            entry_type = dr.DeviceEntryType.SERVICE
         if self.resource.is_eero:
             suggested_area = self.resource.location
             sw_version = self.resource.os_version
@@ -429,14 +436,15 @@ class EeroEntity(CoordinatorEntity):
         ):
             via_device = (DOMAIN, self.network.id)
 
-        return DeviceInfo(
+        return dr.DeviceInfo(
+            entry_type=entry_type,
+            hw_version=hw_version,
             identifiers={(DOMAIN, self.resource.id)},
             manufacturer=MANUFACTURER,
             model=model,
             name=name,
             suggested_area=suggested_area,
             sw_version=sw_version,
-            hw_version=hw_version,
             via_device=via_device,
         )
 

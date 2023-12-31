@@ -100,7 +100,7 @@ action:
       prompt: !input prompt
       # step_counter: !input step_counter
   - alias: Fetch Calendar Agenda
-    service: calendar.list_events
+    service: calendar.get_events
     data:
       duration: !input calendar_duration
     target:

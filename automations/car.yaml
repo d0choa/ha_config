@@ -1,0 +1,27 @@
+- id: "1686850527116"
+  alias: Charging on
+  description: ""
+  trigger:
+    - platform: time
+      at: 00:40:00
+  condition:
+    - type: is_plugged_in
+      condition: device
+      device_id: e6998c098b392712f3f1dbcee7583c5a
+      entity_id: binary_sensor.psl_217243_cable_status
+      domain: binary_sensor
+  action: []
+  mode: single
+- id: "1686850579502"
+  alias: Charging off
+  description: ""
+  trigger:
+    - platform: time
+      at: 04:20:00
+  condition: []
+  action:
+    - type: turn_off
+      device_id: e6998c098b392712f3f1dbcee7583c5a
+      entity_id: switch.psl_217243_charging_allowed
+      domain: switch
+  mode: single

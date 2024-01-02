@@ -1,0 +1,35 @@
+- id: "1670088596974"
+  alias: Xmas on
+  description: ""
+  trigger:
+    - platform: sun
+      event: sunset
+      offset: 0
+  condition: []
+  action:
+    - type: turn_on
+      device_id: 3ef8cef9cb3eaeb0f5cab527b53df55f
+      entity_id: switch.radiador
+      domain: switch
+    - type: turn_on
+      device_id: 500b6b3eab17ab692e709c0ac21efe01
+      entity_id: switch.enchufe_jardin_outlet_3
+      domain: switch
+  mode: single
+- id: "1670088735260"
+  alias: Xmas off
+  description: ""
+  trigger:
+    - platform: time
+      at: "20:15:00"
+  condition: []
+  action:
+    - type: turn_off
+      device_id: 3ef8cef9cb3eaeb0f5cab527b53df55f
+      entity_id: switch.radiador
+      domain: switch
+    - type: turn_off
+      device_id: 500b6b3eab17ab692e709c0ac21efe01
+      entity_id: switch.enchufe_jardin_outlet_3
+      domain: switch
+  mode: single

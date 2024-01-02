@@ -1,0 +1,18 @@
+- id: "1639955024106"
+  alias: Sacar basuras
+  description: ""
+  trigger:
+    - platform: time
+      at: "19:00"
+  condition:
+    - condition: or
+      conditions:
+        - condition: template
+          value_template: "{{ state_attr('sensor.ics_1', 'remaining') == 1 }}"
+        - condition: template
+          value_template: "{{ state_attr('sensor.ics_2', 'remaining') == 1 }}"
+        - condition: template
+          value_template: "{{ state_attr('sensor.ics_3', 'remaining') == 1 }}"
+  action:
+    - service: script.mensaje_recogida_de_basura
+  mode: single

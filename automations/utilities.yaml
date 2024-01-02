@@ -1,0 +1,130 @@
+- id: "1667654894255"
+  alias: Secadora is running
+  description: ""
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.secadora_current
+      for:
+        hours: 0
+        minutes: 1
+        seconds: 0
+      above: 1
+  condition:
+    - condition: state
+      entity_id: input_select.secadora
+      state: "Off"
+  action:
+    - service: input_select.select_option
+      data:
+        option: Running
+      target:
+        entity_id: input_select.secadora
+  mode: single
+- id: "1667663870145"
+  alias: Secadora unemptied
+  description: ""
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.secadora_current
+      for:
+        hours: 0
+        minutes: 1
+        seconds: 0
+      below: 0.1
+  condition:
+    - condition: state
+      entity_id: input_select.secadora
+      state: Running
+  action:
+    - service: notify.notify
+      data:
+        title: " \U0001F455 Secadora terminada"
+        message: Ya puedes sacar la ropa
+    - service: input_select.select_option
+      data:
+        option: Unemptied
+      target:
+        entity_id: input_select.secadora
+  mode: single
+- id: "1667664298296"
+  alias: Secadora off
+  description: ""
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.puerta_secadora
+      from: "off"
+      to: "on"
+  condition: []
+  action:
+    - service: input_select.select_option
+      data:
+        option: "Off"
+      target:
+        entity_id: input_select.secadora
+  mode: single
+- id: "1667672381001"
+  alias: Lavadora running
+  description: ""
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.lavadora_current
+      for:
+        hours: 0
+        minutes: 1
+        seconds: 0
+      above: 0.2
+  condition:
+    - condition: state
+      entity_id: input_select.lavadora
+      state: "Off"
+  action:
+    - service: input_select.select_option
+      data:
+        option: Running
+      target:
+        entity_id: input_select.lavadora
+  mode: single
+- id: "1667672844112"
+  alias: Lavadora unemptied
+  description: ""
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.lavadora_current
+      for:
+        hours: 0
+        minutes: 3
+        seconds: 0
+      below: 0.2
+  condition:
+    - condition: state
+      entity_id: input_select.lavadora
+      state: Running
+  action:
+    - service: notify.notify
+      data:
+        title: "\U0001F455 Lavadora acabada"
+        message: La ropa esta limpia
+    - service: input_select.select_option
+      data:
+        option: Unemptied
+      target:
+        entity_id: input_select.lavadora
+  mode: single
+- id: "1667673340764"
+  alias: Lavadora off
+  description: ""
+  trigger:
+    - platform: state
+      entity_id:
+        - binary_sensor.puerta_lavadora
+      from: "off"
+      to: "on"
+  condition: []
+  action:
+    - service: input_select.select_option
+      data:
+        option: "Off"
+      target:
+        entity_id: input_select.lavadora
+  mode: single

@@ -1,0 +1,162 @@
+- id: "1636311624815"
+  alias: Encender garaje
+  description: Encender sonoff switch cuando detecte movimiento
+  trigger:
+    - type: motion
+      platform: device
+      device_id: 2adecd4de0ca89ea9b049286c91f8042
+      entity_id: binary_sensor.motion_sensor
+      domain: binary_sensor
+  condition: []
+  action:
+    - service: switch.turn_on
+      target:
+        entity_id: switch.sonoff_1000c1dbb0
+  mode: restart
+- id: "1636311769143"
+  alias: Apagar garaje
+  description: Apagar luz cuando no detecte movimiento
+  trigger:
+    - type: no_motion
+      platform: device
+      device_id: 2adecd4de0ca89ea9b049286c91f8042
+      entity_id: binary_sensor.motion_sensor
+      domain: binary_sensor
+      for:
+        hours: 0
+        minutes: 0
+        seconds: 30
+        milliseconds: 0
+  condition: []
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: switch.sonoff_1000c1dbb0
+  mode: restart
+- id: "1639932833502"
+  alias: Pasillo on
+  description: ""
+  trigger:
+    - type: motion
+      platform: device
+      device_id: 02e66fb83767c9a06bca53f3da7946eb
+      entity_id: binary_sensor.presence_7
+      domain: binary_sensor
+  condition:
+    - type: is_illuminance
+      condition: device
+      device_id: 02e66fb83767c9a06bca53f3da7946eb
+      entity_id: sensor.pirpasillo
+      domain: sensor
+      below: 25
+  action:
+    - type: turn_on
+      device_id: fc2cc2bb38a44b2e571bb19a480689fc
+      entity_id: light.lampara_pasillo
+      domain: light
+  mode: single
+- id: "1639933978425"
+  alias: Pasillo off
+  description: ""
+  trigger:
+    - type: no_motion
+      platform: device
+      device_id: 02e66fb83767c9a06bca53f3da7946eb
+      entity_id: binary_sensor.presence_7
+      domain: binary_sensor
+      for:
+        hours: 0
+        minutes: 0
+        seconds: 0
+  condition: []
+  action:
+    - type: turn_off
+      device_id: fc2cc2bb38a44b2e571bb19a480689fc
+      entity_id: light.lampara_pasillo
+      domain: light
+  mode: restart
+- id: "1639938167833"
+  alias: Cocina on
+  description: ""
+  trigger:
+    - type: motion
+      platform: device
+      device_id: 1d6f6eb056c0f58e3a752f25a3eb6f87
+      entity_id: binary_sensor.presence_5
+      domain: binary_sensor
+  condition:
+    - condition: device
+      type: is_off
+      device_id: deebabd24806abcb44a768baa5c0edbc
+      entity_id: light.foco_1
+      domain: light
+    - condition: device
+      type: is_off
+      device_id: 7d8d2d5fc604b73ee96c7da7e2dd18a8
+      entity_id: light.foco_10
+      domain: light
+    - type: is_illuminance
+      condition: device
+      device_id: 1d6f6eb056c0f58e3a752f25a3eb6f87
+      entity_id: sensor.pircocina
+      domain: sensor
+      below: 15
+  action:
+    - service: light.turn_on
+      target:
+        area_id: cocina
+      data:
+        brightness_pct: 85
+  mode: single
+- id: "1639938277341"
+  alias: Cocina off
+  description: ""
+  trigger:
+    - type: no_motion
+      platform: device
+      device_id: 1d6f6eb056c0f58e3a752f25a3eb6f87
+      entity_id: binary_sensor.presence_5
+      domain: binary_sensor
+      for:
+        hours: 0
+        minutes: 6
+        seconds: 0
+  condition: []
+  action:
+    - service: light.turn_off
+      target:
+        area_id: cocina
+      data: {}
+  mode: restart
+- id: "1643485768145"
+  alias: Zapatero on
+  description: ""
+  trigger:
+    - type: opened
+      platform: device
+      device_id: 9abd4889b726ee7cca3c97ca00f1aefa
+      entity_id: binary_sensor.puerta_zapatero
+      domain: binary_sensor
+  condition: []
+  action:
+    - type: turn_on
+      device_id: d9dae8c65a3014a24186c1f8b1628033
+      entity_id: light.lampara_zapatero
+      domain: light
+  mode: single
+- id: "1643485856862"
+  alias: Zapatero off
+  description: ""
+  trigger:
+    - type: not_opened
+      platform: device
+      device_id: 9abd4889b726ee7cca3c97ca00f1aefa
+      entity_id: binary_sensor.puerta_zapatero
+      domain: binary_sensor
+  condition: []
+  action:
+    - type: turn_off
+      device_id: d9dae8c65a3014a24186c1f8b1628033
+      entity_id: light.lampara_zapatero
+      domain: light
+  mode: single

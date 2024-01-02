@@ -1,0 +1,16 @@
+- id: "1663529667041"
+  alias: Buzon opened
+  description: Manda mensaje cuando el buzón se abre
+  trigger:
+    - type: opened
+      platform: device
+      device_id: 842ec6b5af079136c71f0a24092e3633
+      entity_id: binary_sensor.buzon
+      domain: binary_sensor
+  condition: []
+  action:
+    - service: notify.notify
+      data:
+        title: Correo nuevo
+        message: Se ha abierto el buzón
+  mode: single

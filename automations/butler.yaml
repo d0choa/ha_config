@@ -1,0 +1,26 @@
+- id: "1691782131812"
+  alias: Conversation agent agenda notification
+  description: ""
+  use_blueprint:
+    path: homeassistant/notify_agent_agenda.yaml
+    input:
+      conversation_agent: 954bac824c80252069a65938b6afb1cb
+      weather_entity: weather.met_office_sawston_3_hourly
+      zone_entity: zone.home
+      calendar_entity: calendar.podorricalendar
+      notify_service: notify.mobile_app_macbookpro
+      media_player:
+        entity_id: media_player.salon
+        media_content_id: media-source://tts/tts.piper?message=Hello+David%2C+you+can+play+any+text+on+any+supported+media+player%21&language=en_US&voice=en_US-amy-low
+        media_content_type: provider
+        metadata:
+          title: Hello David, you can play any text on any supported media player!
+          thumbnail: https://brands.home-assistant.io/_/tts/logo.png
+          media_class: app
+          children_media_class:
+          navigateIds:
+            - {}
+            - media_content_type: app
+              media_content_id: media-source://tts
+            - media_content_type: provider
+              media_content_id: media-source://tts/tts.piper?message=Hello+David%2C+you+can+play+any+text+on+any+supported+media+player%21&language=en_US&voice=en_US-amy-low

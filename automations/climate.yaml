@@ -1,0 +1,49 @@
+- id: "1644487062091"
+  alias: Radiator off
+  description: ""
+  trigger:
+    - type: temperature
+      platform: device
+      device_id: 34b6faa0cd59d3ec8ffb82337a27e6a0
+      entity_id: sensor.temperaturastudy
+      domain: sensor
+      above: 20
+  condition: []
+  action:
+    - type: turn_off
+      device_id: 3ef8cef9cb3eaeb0f5cab527b53df55f
+      entity_id: switch.radiador
+      domain: switch
+  mode: single
+- id: "1639246553873"
+  alias: Dehumidifier on
+  description: ""
+  trigger:
+    - platform: time
+      at: 00:40:00
+  condition:
+    - type: is_humidity
+      condition: device
+      device_id: 46e1355a193ec22e4bf1d372a9562bcc
+      entity_id: sensor.hall_humidity
+      domain: sensor
+      above: 50
+  action:
+    - type: turn_on
+      device_id: 76a2b476cd597555ec19abe52d0dfb85
+      entity_id: switch.dehumidifier
+      domain: switch
+  mode: single
+- id: "1639246608141"
+  alias: Dehumidifier off
+  description: ""
+  trigger:
+    - platform: time
+      at: 04:30
+  condition: []
+  action:
+    - type: turn_off
+      device_id: 76a2b476cd597555ec19abe52d0dfb85
+      entity_id: switch.dehumidifier
+      domain: switch
+  mode: single

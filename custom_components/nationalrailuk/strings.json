@@ -1,0 +1,23 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Monitor one or more train routes",
+                "description": "Chose the train lines you want to monitor",
+                "data": {
+                    "api_token": "Token for the National rail API",
+                    "station": "Departing station",
+                    "destinations": "Destination station. Multiple station musts be separated by a comma",
+                }
+            }
+        },
+        "error": {
+            "invalid_token": "Invalid National Rail Token",
+            "invalid_station_input": "Invalid station/destination input",
+            "unknown": "[%key:common::config_flow::error::unknown%]",
+        },
+        "abort": {
+            "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+        }
+    }
+}

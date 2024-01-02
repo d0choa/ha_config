@@ -1,8 +1,0 @@
----
-eufy_vacuum:
-  devices:
-    - name: Robovac
-      address: !secret eufy_address
-      access_token: !secret eufy_access_token
-      id: !secret eufy_id
-      type: T2118

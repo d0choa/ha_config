@@ -5,11 +5,12 @@ from logging import DEBUG
 from time import time
 import typing
 
-from homeassistant import config_entries
+from homeassistant import config_entries, const as hac
 from homeassistant.const import CONF_ERROR
 from homeassistant.data_entry_flow import AbortFlow, FlowHandler, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import selector
 import voluptuous as vol
 
 from . import MerossApi, const as mlc
@@ -17,12 +18,14 @@ from .helpers import LOGGER, ApiProfile, ConfigEntriesHelper
 from .merossclient import (
     MerossDeviceDescriptor,
     MerossKeyError,
+    MerossProtocolError,
     const as mc,
     get_default_arguments,
 )
 from .merossclient.cloudapi import (
+    API_URL_MAP,
     CloudApiError,
-    async_cloudapi_login,
+    async_cloudapi_signin,
     async_cloudapi_logout_safe,
 )
 from .merossclient.httpclient import MerossHttpClient
@@ -49,6 +52,9 @@ class ConfigError(Exception):
 
 class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
     """Mixin providing commons for Config and Option flows"""
+
+    VERSION = 1
+    MINOR_VERSION = 1
 
     # this is set for an OptionsFlow
     _profile_entry: config_entries.ConfigEntry | None = None
@@ -91,10 +97,12 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
                 # all of the flows logic and try to directly manage the
                 # underlying ConfigEntry in a sort of a crazy generalization
                 if mlc.CONF_PASSWORD in user_input:
-                    credentials = await async_cloudapi_login(
+                    credentials = await async_cloudapi_signin(
                         profile_config[mlc.CONF_EMAIL],
                         user_input[mlc.CONF_PASSWORD],
-                        async_get_clientsession(self.hass),
+                        region=profile_config.pop(mlc.CONF_CLOUD_REGION, None),  # type: ignore
+                        domain=profile_config.get(mc.KEY_DOMAIN),
+                        session=async_get_clientsession(self.hass),
                     )
                     if (
                         mc.KEY_USERID_ in profile_config
@@ -102,7 +110,7 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
                         != profile_config[mc.KEY_USERID_]
                     ):
                         await async_cloudapi_logout_safe(
-                            credentials[mc.KEY_TOKEN],
+                            credentials,
                             async_get_clientsession(self.hass),
                         )
                         raise ConfigError(ERR_CLOUD_PROFILE_MISMATCH)
@@ -142,7 +150,20 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
                         # this flow is managing a device but since the profile
                         # entry is new, we'll directly setup that
                         await helper.config_entries.async_add(
+                            # there's a bad compatibility issue between core 2024.1 and
+                            # previous versions up to latest 2023 on ConfigEntry. Namely:
+                            # previous core versions used positional args in ConfigEntry
+                            # while core 2024.X moves to full kwargs with required minor_version
+                            # this patch is the best I can think of
                             config_entries.ConfigEntry(
+                                version=self.VERSION,
+                                minor_version=self.MINOR_VERSION,  # type: ignore
+                                domain=mlc.DOMAIN,
+                                title=profile_config[mc.KEY_EMAIL],
+                                data=profile_config,
+                                source=config_entries.SOURCE_USER,
+                                unique_id=unique_id,
+                            ) if hac.MAJOR_VERSION >= 2024 else config_entries.ConfigEntry(  # type: ignore
                                 version=self.VERSION,
                                 domain=mlc.DOMAIN,
                                 title=profile_config[mc.KEY_EMAIL],
@@ -183,6 +204,24 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
         else:
             # this is not a profile OptionsFlow so we'd need to login for sure
             # with full credentials
+            config_schema[
+                vol.Optional(
+                    mlc.CONF_CLOUD_REGION,
+                    description={
+                        DESCR: user_input.get(mlc.CONF_CLOUD_REGION)
+                        if user_input
+                        else None
+                    },
+                )
+            ] = selector(
+                {
+                    "select": {
+                        "options": list(API_URL_MAP.keys()),
+                        "translation_key": mlc.CONF_CLOUD_REGION,
+                        "mode": "dropdown",
+                    }
+                }
+            )
             config_schema[
                 vol.Required(
                     mlc.CONF_EMAIL,
@@ -306,6 +345,11 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
             if not isinstance(response, dict):
                 continue  # try next connection if any
             payload = response[mc.KEY_PAYLOAD]
+            if mc.KEY_ERROR in payload:
+                if payload[mc.KEY_ERROR].get(mc.KEY_CODE) == mc.ERROR_INVALIDKEY:
+                    raise MerossKeyError(response)
+                else:
+                    raise MerossProtocolError(response, payload[mc.KEY_ERROR])
             response = await mqttconnection.async_mqtt_publish(
                 device_id,
                 *get_default_arguments(mc.NS_APPLIANCE_SYSTEM_ABILITY),
@@ -315,6 +359,11 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
                 payload = None
                 continue  # try next connection if any
             payload.update(response[mc.KEY_PAYLOAD])
+            if mc.KEY_ERROR in payload:
+                if payload[mc.KEY_ERROR].get(mc.KEY_CODE) == mc.ERROR_INVALIDKEY:
+                    raise MerossKeyError(response)
+                else:
+                    raise MerossProtocolError(response, payload[mc.KEY_ERROR])
             descriptor = MerossDeviceDescriptor(payload)
             return (
                 {
@@ -332,8 +381,6 @@ class MerossFlowHandlerMixin(FlowHandler if typing.TYPE_CHECKING else object):
 
 class ConfigFlow(MerossFlowHandlerMixin, config_entries.ConfigFlow, domain=mlc.DOMAIN):
     """Handle a config flow for Meross IoT local LAN."""
-
-    VERSION = 1
 
     _MENU_USER = {
         "step_id": "user",

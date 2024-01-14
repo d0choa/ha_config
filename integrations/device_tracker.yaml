@@ -1,6 +1,0 @@
-# Example configuration.yaml entry for Tado
-device_tracker:
-  - platform: tado
-    username: !secret tado_username
-    password: !secret tado_password
-    home_id: !secret tado_home_id

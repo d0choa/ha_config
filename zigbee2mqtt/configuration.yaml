@@ -1,0 +1,71 @@
+homeassistant: true
+advanced:
+  network_key:
+    - 10
+    - 25
+    - 3
+    - 241
+    - 127
+    - 182
+    - 252
+    - 37
+    - 219
+    - 224
+    - 133
+    - 57
+    - 50
+    - 223
+    - 5
+    - 45
+  pan_id: 26867
+  ext_pan_id:
+    - 79
+    - 28
+    - 139
+    - 3
+    - 153
+    - 8
+    - 138
+    - 232
+  homeassistant_legacy_entity_attributes: false
+  legacy_api: false
+  legacy_availability_payload: false
+mqtt:
+  server: mqtt://core-mosquitto:1883
+  user: addons
+  password: uiPh2PhighaeShee8soweeDeiKaidee9vagheiz6Loha7kajaiGiabaegoo9xohx
+frontend:
+  port: 8099
+serial:
+  port: /dev/ttyACM0
+  adapter: ezsp
+device_options:
+  legacy: false
+permit_join: false
+devices:
+  '0x001788010204edcc':
+    friendly_name: Pie
+  '0x001788010204b44e':
+    friendly_name: Media unit
+  '0x001788010204ee1b':
+    friendly_name: Nicolas
+  '0x0017880102de6d32':
+    friendly_name: Invitados
+  '0x00178801102c038c':
+    friendly_name: Lampara dormitorio
+  '0x0017880103409e61':
+    friendly_name: Mesilla
+  '0x0017880103409a00':
+    friendly_name: Mesillo
+  '0x00158d0005a1ae12':
+    friendly_name: Juguetes
+  '0x00158d0005a1b0be':
+    friendly_name: Zapatero
+  '0x00158d00075f32b9':
+    friendly_name: Study
+  '0x0017880108ba0045':
+    friendly_name: Pasillo
+  '0x00158d0007f84594':
+    friendly_name: Puerta Zapatero
+  '0x001788010918c767':
+    friendly_name: Garaje

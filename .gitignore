@@ -48,3 +48,4 @@ ffmpeg-*.log
 
 .sonoff.json
 .shopping_list.json
+zigbee2mqtt/log/*

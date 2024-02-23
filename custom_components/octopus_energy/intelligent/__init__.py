@@ -6,9 +6,9 @@ from homeassistant.util.dt import (utcnow, parse_datetime)
 
 from homeassistant.helpers import storage
 
-from ..utils import get_active_tariff_code, get_tariff_parts
+from ..utils import OffPeakTime, get_active_tariff_code, get_tariff_parts
 
-from ..const import DOMAIN
+from ..const import DOMAIN, INTELLIGENT_SOURCE_BUMP_CHARGE, INTELLIGENT_SOURCE_SMART_CHARGE, REFRESH_RATE_IN_MINUTES_INTELLIGENT
 
 from ..api_client.intelligent_settings import IntelligentSettings
 from ..api_client.intelligent_dispatches import IntelligentDispatchItem, IntelligentDispatches
@@ -36,24 +36,48 @@ def mock_intelligent_dispatches() -> IntelligentDispatches:
       utcnow().replace(hour=19, minute=0, second=0, microsecond=0),
       utcnow().replace(hour=20, minute=0, second=0, microsecond=0),
       1,
-      "smart-charge",
-      "home"
-    ),
-    IntelligentDispatchItem(
-      utcnow().replace(hour=6, minute=0, second=0, microsecond=0),
-      utcnow().replace(hour=7, minute=0, second=0, microsecond=0),
-      1.2,
-      "smart-charge",
+      INTELLIGENT_SOURCE_SMART_CHARGE,
       "home"
     ),
     IntelligentDispatchItem(
       utcnow().replace(hour=7, minute=0, second=0, microsecond=0),
       utcnow().replace(hour=8, minute=0, second=0, microsecond=0),
       4.6,
-      "smart-charge",
+      INTELLIGENT_SOURCE_SMART_CHARGE,
+      "home"
+    ),
+
+    IntelligentDispatchItem(
+      utcnow().replace(hour=12, minute=0, second=0, microsecond=0),
+      utcnow().replace(hour=13, minute=0, second=0, microsecond=0),
+      4.6,
+      INTELLIGENT_SOURCE_BUMP_CHARGE,
       "home"
     )
   ]
+
+  # Simulate a dispatch coming in late
+  if (utcnow() >= utcnow().replace(hour=10, minute=10, second=0, microsecond=0) - timedelta(minutes=REFRESH_RATE_IN_MINUTES_INTELLIGENT)):
+    dispatches.append(
+      IntelligentDispatchItem(
+        utcnow().replace(hour=10, minute=10, second=0, microsecond=0),
+        utcnow().replace(hour=10, minute=30, second=0, microsecond=0),
+        1.2,
+        INTELLIGENT_SOURCE_SMART_CHARGE,
+        "home"
+      )
+    )
+
+  if (utcnow() >= utcnow().replace(hour=18, minute=0, second=0, microsecond=0) - timedelta(minutes=REFRESH_RATE_IN_MINUTES_INTELLIGENT)):
+    dispatches.append(
+      IntelligentDispatchItem(
+        utcnow().replace(hour=18, minute=0, second=0, microsecond=0),
+        utcnow().replace(hour=18, minute=20, second=0, microsecond=0),
+        1.2,
+        INTELLIGENT_SOURCE_SMART_CHARGE,
+        "home"
+      )
+    )
 
   for dispatch in dispatches:
     if (dispatch.end > utcnow()):
@@ -106,7 +130,12 @@ def has_intelligent_tariff(current: datetime, account_info):
 def __get_dispatch(rate, dispatches: list[IntelligentDispatchItem], expected_source: str):
   if dispatches is not None:
     for dispatch in dispatches:
-      if (expected_source is None or dispatch.source == expected_source) and dispatch.start <= rate["start"] and dispatch.end >= rate["end"]:
+      if ((expected_source is None or dispatch.source == expected_source) and 
+          ((dispatch.start <= rate["start"] and dispatch.end >= rate["end"]) or # Rate is within dispatch
+           (dispatch.start >= rate["start"] and dispatch.start < rate["end"]) or # dispatch starts within rate
+           (dispatch.end > rate["start"] and dispatch.end <= rate["end"]) # dispatch ends within rate
+          )
+        ):
         return dispatch
     
   return None
@@ -120,7 +149,7 @@ def adjust_intelligent_rates(rates, planned_dispatches: list[IntelligentDispatch
       adjusted_rates.append(rate)
       continue
 
-    if __get_dispatch(rate, planned_dispatches, "smart-charge") is not None or __get_dispatch(rate, completed_dispatches, None) is not None:
+    if __get_dispatch(rate, planned_dispatches, INTELLIGENT_SOURCE_SMART_CHARGE) is not None or __get_dispatch(rate, completed_dispatches, None) is not None:
       adjusted_rates.append({
         "start": rate["start"],
         "end": rate["end"],
@@ -136,13 +165,13 @@ def adjust_intelligent_rates(rates, planned_dispatches: list[IntelligentDispatch
 def is_in_planned_dispatch(current_date: datetime, dispatches: list[IntelligentDispatchItem]) -> bool:
   for dispatch in dispatches:
     if (dispatch.start <= current_date and dispatch.end >= current_date):
-      return True
+      return dispatch.source == INTELLIGENT_SOURCE_SMART_CHARGE
   
   return False
 
 def is_in_bump_charge(current_date: datetime, dispatches: list[IntelligentDispatchItem]) -> bool:
   for dispatch in dispatches:
-    if (dispatch.source == "bump-charge" and dispatch.start <= current_date and dispatch.end >= current_date):
+    if (dispatch.source == INTELLIGENT_SOURCE_BUMP_CHARGE and dispatch.start <= current_date and dispatch.end >= current_date):
       return True
   
   return False
@@ -231,3 +260,39 @@ def get_intelligent_features(provider: str) -> IntelligentFeatures:
 
   _LOGGER.warning(f"Unexpected intelligent provider '{provider}'")
   return IntelligentFeatures(False, False, False, False, False)
+
+class DispatchTime:
+  start: datetime
+  end: datetime
+
+  def __init__(self, start, end):
+    self.start = start
+    self.end = end
+
+def get_dispatch_times(current: datetime, off_peak_times: list[OffPeakTime], planned_dispatches: list[IntelligentDispatchItem]):
+  times: list[DispatchTime] = []
+
+  if off_peak_times is not None:
+    for off_peak_time in off_peak_times:
+      if off_peak_time.end >= current:
+        times.append(DispatchTime(off_peak_time.start, off_peak_time.end))
+
+  if planned_dispatches is not None:
+    for dispatch in planned_dispatches:
+      if dispatch.end < current:
+        continue
+
+      dispatch_time_added = False
+      for time in times:
+        if dispatch.start <= time.start and dispatch.end >= time.start:
+          time.start = dispatch.start
+          dispatch_time_added = True
+        elif dispatch.start <= time.end and dispatch.end >= time.end:
+          time.end = dispatch.end
+          dispatch_time_added = True
+
+      if dispatch_time_added == False:
+        times.append(DispatchTime(dispatch.start, dispatch.end))
+
+  times.sort(key=lambda time: time.start)
+  return times

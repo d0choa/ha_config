@@ -2,7 +2,7 @@ import voluptuous as vol
 import logging
 
 from homeassistant.util.dt import (utcnow)
-from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_platform, issue_registry as ir, entity_registry as er
 
 from .electricity.current_consumption import OctopusEnergyCurrentElectricityConsumption
@@ -41,6 +41,7 @@ from .wheel_of_fortune.gas_spins import OctopusEnergyWheelOfFortuneGasSpins
 from .cost_tracker.cost_tracker import OctopusEnergyCostTrackerSensor
 from .cost_tracker.cost_tracker_off_peak import OctopusEnergyCostTrackerOffPeakSensor
 from .cost_tracker.cost_tracker_peak import OctopusEnergyCostTrackerPeakSensor
+from .greenness_forecast.current_index import OctopusEnergyGreennessForecastCurrentIndex
 
 from .coordinators.current_consumption import async_create_current_consumption_coordinator
 from .coordinators.gas_rates import async_setup_gas_rates_coordinator
@@ -65,6 +66,7 @@ from .const import (
   CONFIG_MAIN_LIVE_GAS_CONSUMPTION_REFRESH_IN_MINUTES,
   CONFIG_MAIN_PREVIOUS_ELECTRICITY_CONSUMPTION_DAYS_OFFSET,
   CONFIG_MAIN_PREVIOUS_GAS_CONSUMPTION_DAYS_OFFSET,
+  DATA_GREENNESS_FORECAST_COORDINATOR,
   DOMAIN,
   
   CONFIG_MAIN_SUPPORTS_LIVE_CONSUMPTION,
@@ -142,12 +144,13 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
   account_info = account_result.account if account_result is not None else None
 
   wheel_of_fortune_coordinator = await async_setup_wheel_of_fortune_spins_coordinator(hass, account_id)
+  greenness_forecast_coordinator = hass.data[DOMAIN][account_id][DATA_GREENNESS_FORECAST_COORDINATOR]
   
   entities = [
     OctopusEnergyWheelOfFortuneElectricitySpins(hass, wheel_of_fortune_coordinator, client, account_id),
-    OctopusEnergyWheelOfFortuneGasSpins(hass, wheel_of_fortune_coordinator, client, account_id)
+    OctopusEnergyWheelOfFortuneGasSpins(hass, wheel_of_fortune_coordinator, client, account_id),
+    OctopusEnergyGreennessForecastCurrentIndex(hass, greenness_forecast_coordinator, account_id)
   ]
-
 
   registry = er.async_get(hass)
   entity_ids_to_migrate = []
@@ -179,10 +182,10 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
           electricity_rate_coordinator = hass.data[DOMAIN][account_id][DATA_ELECTRICITY_RATES_COORDINATOR_KEY.format(mpan, serial_number)]
           electricity_standing_charges_coordinator = await async_setup_electricity_standing_charges_coordinator(hass, account_id, mpan, serial_number)
 
-          entities.append(OctopusEnergyElectricityCurrentRate(hass, electricity_rate_coordinator, meter, point, electricity_tariff_code, electricity_price_cap))
+          entities.append(OctopusEnergyElectricityCurrentRate(hass, electricity_rate_coordinator, meter, point, electricity_price_cap))
           entities.append(OctopusEnergyElectricityPreviousRate(hass, electricity_rate_coordinator, meter, point))
           entities.append(OctopusEnergyElectricityNextRate(hass, electricity_rate_coordinator, meter, point))
-          entities.append(OctopusEnergyElectricityCurrentStandingCharge(hass, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
+          entities.append(OctopusEnergyElectricityCurrentStandingCharge(hass, electricity_standing_charges_coordinator, meter, point))
 
           previous_consumption_coordinator = await async_create_previous_consumption_and_rates_coordinator(
             hass,
@@ -191,16 +194,15 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
             mpan,
             serial_number,
             True,
-            electricity_tariff_code,
             meter["is_smart_meter"],
             previous_electricity_consumption_days_offset
           )
-          entities.append(OctopusEnergyPreviousAccumulativeElectricityConsumption(hass, client, previous_consumption_coordinator, electricity_tariff_code, meter, point))
-          entities.append(OctopusEnergyPreviousAccumulativeElectricityConsumptionPeak(hass, previous_consumption_coordinator, electricity_tariff_code, meter, point))
-          entities.append(OctopusEnergyPreviousAccumulativeElectricityConsumptionOffPeak(hass, previous_consumption_coordinator, electricity_tariff_code, meter, point))
-          entities.append(OctopusEnergyPreviousAccumulativeElectricityCost(hass, previous_consumption_coordinator, electricity_tariff_code, meter, point))
-          entities.append(OctopusEnergyPreviousAccumulativeElectricityCostPeak(hass, previous_consumption_coordinator, electricity_tariff_code, meter, point))
-          entities.append(OctopusEnergyPreviousAccumulativeElectricityCostOffPeak(hass, previous_consumption_coordinator, electricity_tariff_code, meter, point))
+          entities.append(OctopusEnergyPreviousAccumulativeElectricityConsumption(hass, client, previous_consumption_coordinator, account_id, meter, point))
+          entities.append(OctopusEnergyPreviousAccumulativeElectricityConsumptionPeak(hass, previous_consumption_coordinator, meter, point))
+          entities.append(OctopusEnergyPreviousAccumulativeElectricityConsumptionOffPeak(hass, previous_consumption_coordinator, meter, point))
+          entities.append(OctopusEnergyPreviousAccumulativeElectricityCost(hass, previous_consumption_coordinator, meter, point))
+          entities.append(OctopusEnergyPreviousAccumulativeElectricityCostPeak(hass, previous_consumption_coordinator, meter, point))
+          entities.append(OctopusEnergyPreviousAccumulativeElectricityCostOffPeak(hass, previous_consumption_coordinator, meter, point))
           entities.append(OctopusEnergyPreviousAccumulativeElectricityCostOverride(hass, account_id, previous_consumption_coordinator, client, electricity_tariff_code, meter, point))
 
           if meter["is_export"] == False and CONFIG_MAIN_SUPPORTS_LIVE_CONSUMPTION in config and config[CONFIG_MAIN_SUPPORTS_LIVE_CONSUMPTION] == True:
@@ -211,12 +213,12 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
             if meter["device_id"] is not None and meter["device_id"] != "":
               consumption_coordinator = await async_create_current_consumption_coordinator(hass, account_id, client, meter["device_id"], live_consumption_refresh_in_minutes)
               entities.append(OctopusEnergyCurrentElectricityConsumption(hass, consumption_coordinator, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeElectricityConsumption(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeElectricityConsumptionPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeElectricityConsumptionOffPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeElectricityCost(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeElectricityCostPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeElectricityCostOffPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, electricity_tariff_code, meter, point))
+              entities.append(OctopusEnergyCurrentAccumulativeElectricityConsumption(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, meter, point))
+              entities.append(OctopusEnergyCurrentAccumulativeElectricityConsumptionPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, meter, point))
+              entities.append(OctopusEnergyCurrentAccumulativeElectricityConsumptionOffPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, meter, point))
+              entities.append(OctopusEnergyCurrentAccumulativeElectricityCost(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, meter, point))
+              entities.append(OctopusEnergyCurrentAccumulativeElectricityCostPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, meter, point))
+              entities.append(OctopusEnergyCurrentAccumulativeElectricityCostOffPeak(hass, consumption_coordinator, electricity_rate_coordinator, electricity_standing_charges_coordinator, meter, point))
               entities.append(OctopusEnergyCurrentElectricityDemand(hass, consumption_coordinator, meter, point))
 
               ir.async_delete_issue(hass, DOMAIN, f"octopus_mini_not_valid_electricity_{mpan}_{serial_number}")
@@ -265,10 +267,10 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
           gas_rate_coordinator = await async_setup_gas_rates_coordinator(hass, account_id, client, mprn, serial_number)
           gas_standing_charges_coordinator = await async_setup_gas_standing_charges_coordinator(hass, account_id, mprn, serial_number)
 
-          entities.append(OctopusEnergyGasCurrentRate(hass, gas_rate_coordinator, gas_tariff_code, meter, point, gas_price_cap))
+          entities.append(OctopusEnergyGasCurrentRate(hass, gas_rate_coordinator, meter, point, gas_price_cap))
           entities.append(OctopusEnergyGasPreviousRate(hass, gas_rate_coordinator, meter, point))
           entities.append(OctopusEnergyGasNextRate(hass, gas_rate_coordinator, meter, point))
-          entities.append(OctopusEnergyGasCurrentStandingCharge(hass, gas_standing_charges_coordinator, gas_tariff_code, meter, point))
+          entities.append(OctopusEnergyGasCurrentStandingCharge(hass, gas_standing_charges_coordinator, meter, point))
 
           previous_consumption_coordinator = await async_create_previous_consumption_and_rates_coordinator(
             hass,
@@ -277,13 +279,12 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
             mprn,
             serial_number,
             False,
-            gas_tariff_code,
             None,
             previous_gas_consumption_days_offset
           )
-          entities.append(OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(hass, client, previous_consumption_coordinator, gas_tariff_code, meter, point, calorific_value))
-          entities.append(OctopusEnergyPreviousAccumulativeGasConsumptionKwh(hass, previous_consumption_coordinator, gas_tariff_code, meter, point, calorific_value))
-          entities.append(OctopusEnergyPreviousAccumulativeGasCost(hass, previous_consumption_coordinator, gas_tariff_code, meter, point, calorific_value))
+          entities.append(OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(hass, client, previous_consumption_coordinator, meter, point, calorific_value))
+          entities.append(OctopusEnergyPreviousAccumulativeGasConsumptionKwh(hass, previous_consumption_coordinator, meter, point, calorific_value))
+          entities.append(OctopusEnergyPreviousAccumulativeGasCost(hass, previous_consumption_coordinator, meter, point, calorific_value))
           entities.append(OctopusEnergyPreviousAccumulativeGasCostOverride(hass,  account_id, previous_consumption_coordinator, client, gas_tariff_code, meter, point, calorific_value))
 
           entity_ids_to_migrate.append({
@@ -299,9 +300,9 @@ async def async_setup_default_sensors(hass: HomeAssistant, config, async_add_ent
             if meter["device_id"] is not None and meter["device_id"] != "":
               consumption_coordinator = await async_create_current_consumption_coordinator(hass, account_id, client, meter["device_id"], live_consumption_refresh_in_minutes)
               entities.append(OctopusEnergyCurrentGasConsumption(hass, consumption_coordinator, meter, point))
-              entities.append(OctopusEnergyCurrentAccumulativeGasConsumptionKwh(hass, consumption_coordinator, gas_rate_coordinator, gas_standing_charges_coordinator, gas_tariff_code, meter, point, calorific_value))
-              entities.append(OctopusEnergyCurrentAccumulativeGasConsumptionCubicMeters(hass, consumption_coordinator, gas_rate_coordinator, gas_standing_charges_coordinator, gas_tariff_code, meter, point, calorific_value))
-              entities.append(OctopusEnergyCurrentAccumulativeGasCost(hass, consumption_coordinator, gas_rate_coordinator, gas_standing_charges_coordinator, gas_tariff_code, meter, point, calorific_value))
+              entities.append(OctopusEnergyCurrentAccumulativeGasConsumptionKwh(hass, consumption_coordinator, gas_rate_coordinator, gas_standing_charges_coordinator, meter, point, calorific_value))
+              entities.append(OctopusEnergyCurrentAccumulativeGasConsumptionCubicMeters(hass, consumption_coordinator, gas_rate_coordinator, gas_standing_charges_coordinator, meter, point, calorific_value))
+              entities.append(OctopusEnergyCurrentAccumulativeGasCost(hass, consumption_coordinator, gas_rate_coordinator, gas_standing_charges_coordinator, meter, point, calorific_value))
               
               entity_ids_to_migrate.append({
                 "old": f"octopus_energy_gas_{serial_number}_{mprn}_current_accumulative_consumption",

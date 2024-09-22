@@ -5,17 +5,17 @@ light:
     name: Kitchen
     unique_id: light.kitchen
     entities:
-      - light.foco_5
-      - light.foco_6
-      - light.foco_7
-      - light.foco_8
-      - light.foco_9
-      - light.foco_10
+      - light.foco_5_2
+      - light.foco_6_2
+      - light.foco_7_2
+      - light.foco_8_2
+      - light.foco_9_2
+      - light.foco_10_2
   - platform: group
     name: Comedor
     unique_id: light.comedor
     entities:
-      - light.foco_1
-      - light.foco_2
-      - light.foco_3
-      - light.foco_4
+      - light.foco_1_2
+      - light.foco_2_2
+      - light.foco_3_2
+      - light.foco_4_2

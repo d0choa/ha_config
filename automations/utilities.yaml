@@ -46,23 +46,6 @@
       target:
         entity_id: input_select.secadora
   mode: single
-- id: "1667664298296"
-  alias: Secadora off
-  description: ""
-  trigger:
-    - platform: state
-      entity_id:
-        - binary_sensor.puerta_secadora
-      from: "off"
-      to: "on"
-  condition: []
-  action:
-    - service: input_select.select_option
-      data:
-        option: "Off"
-      target:
-        entity_id: input_select.secadora
-  mode: single
 - id: "1667672381001"
   alias: Lavadora running
   description: ""
@@ -108,23 +91,6 @@
     - service: input_select.select_option
       data:
         option: Unemptied
-      target:
-        entity_id: input_select.lavadora
-  mode: single
-- id: "1667673340764"
-  alias: Lavadora off
-  description: ""
-  trigger:
-    - platform: state
-      entity_id:
-        - binary_sensor.puerta_lavadora
-      from: "off"
-      to: "on"
-  condition: []
-  action:
-    - service: input_select.select_option
-      data:
-        option: "Off"
       target:
         entity_id: input_select.lavadora
   mode: single

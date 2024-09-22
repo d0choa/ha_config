@@ -134,8 +134,8 @@
         "occupancy": false,
         "temperature": 16.51,
         "motion_sensitivity": "high",
-        "illuminance": 19932,
-        "illuminance_lux": 98,
+        "illuminance": 0,
+        "illuminance_lux": 0,
         "linkquality": 156,
         "update": {
             "state": "idle",
@@ -299,7 +299,7 @@
     },
     "0x287681fffefbc1a7": {
         "temperature": 23,
-        "humidity": 68,
+        "humidity": 69,
         "pm25": 7,
         "update": {
             "state": "idle",

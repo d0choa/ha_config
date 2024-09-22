@@ -1,13 +1,532 @@
----
-# This file is used by the automations editor
-# in the Home Assistant frontend.
-#
-# I personally do not use it, mainly because I like doing this in YAML.
-# However, from time to time, it is helpful to click a bit and see
-# what the frontend makes of it.
-#
-# This file must exist for the frontend Automation editor to work.
-# Hence, it is here, empty.
-#
-# If you are looking for my automations: See automations folder.
-[]
+- id: '1708899946891'
+  alias: Cocina On
+  description: ''
+  trigger:
+  - platform: state
+    entity_id:
+    - binary_sensor.cocina_occupancy
+    from: 'off'
+    to: 'on'
+  condition:
+  - condition: device
+    type: is_off
+    device_id: 14397a4f1d4a6e67cb7dfa2af280f5e7
+    entity_id: 8b85707d6b1920255d542f48374cf571
+    domain: light
+  - condition: device
+    type: is_off
+    device_id: f45d773cf0789a51f74b11503a44842a
+    entity_id: cfee0d9830f46d4bdccdf0af06f8d8c8
+    domain: light
+  - condition: numeric_state
+    entity_id: sensor.cocina_illuminance_lux
+    below: 15
+  action:
+  - service: light.turn_on
+    metadata: {}
+    data:
+      brightness_pct: 85
+    target:
+      area_id: cocina
+  mode: single
+- id: '1708900307222'
+  alias: Cocina Off
+  description: ''
+  trigger:
+  - type: no_motion
+    platform: device
+    device_id: aae8ef5c569532288046cbe66bbe9340
+    entity_id: 6eb608f81cc404d69a04469e870153f3
+    domain: binary_sensor
+    for:
+      hours: 0
+      minutes: 6
+      seconds: 0
+  condition: []
+  action:
+  - service: light.turn_off
+    metadata: {}
+    data: {}
+    target:
+      area_id: cocina
+  mode: restart
+- id: '1708984518019'
+  alias: Correo nuevo
+  description: Manda mensaje cuando el buzón se abre
+  trigger:
+  - platform: state
+    entity_id:
+    - binary_sensor.buzon_contact
+    from: 'off'
+    to: 'on'
+  condition: []
+  action:
+  - service: notify.notify
+    metadata: {}
+    data:
+      title: "\U0001F4EE Correo nuevo"
+      message: Se ha abierto el buzón
+  mode: single
+- id: '1709071324869'
+  alias: Lavadora off
+  description: ''
+  trigger:
+  - platform: state
+    entity_id:
+    - binary_sensor.lavadora_contact
+    from: 'off'
+    to: 'on'
+  condition: []
+  action:
+  - service: input_select.select_option
+    data:
+      option: 'Off'
+    target:
+      entity_id: input_select.lavadora
+  - service: grocy.complete_task
+    metadata: {}
+    data:
+      task_id: '{{state_attr(''sensor.grocy_tasks'', ''tasks'')         |
+
+        selectattr(''name'', ''eq'', ''Vaciar lavadora'')         |
+
+        map(attribute=''id'')|first}}'
+  mode: single
+- id: '1709071521536'
+  alias: Secadora off
+  description: ''
+  trigger:
+  - platform: state
+    entity_id:
+    - binary_sensor.secadora_contact
+    to: 'on'
+  condition: []
+  action:
+  - service: input_select.select_option
+    data:
+      option: 'Off'
+    target:
+      entity_id: input_select.secadora
+  mode: single
+- id: '1709071810045'
+  alias: Pasillo on
+  description: ''
+  trigger:
+  - type: motion
+    platform: device
+    device_id: b59d12b4698afa0f7f370c06f5c1753b
+    entity_id: 77418d7d85197491f27147495a442c9a
+    domain: binary_sensor
+  condition:
+  - type: is_illuminance
+    condition: device
+    device_id: b59d12b4698afa0f7f370c06f5c1753b
+    entity_id: b65afd51057192f9c1eb4d24bcf9a0a0
+    domain: sensor
+    below: 15
+  action:
+  - type: turn_on
+    device_id: b534e916da63a063bd3438a2ce292feb
+    entity_id: 8f691d18b7d0553db0d064d277370613
+    domain: light
+  mode: single
+- id: '1709071936599'
+  alias: Pasillo off
+  description: ''
+  trigger:
+  - type: no_motion
+    platform: device
+    device_id: b59d12b4698afa0f7f370c06f5c1753b
+    entity_id: 77418d7d85197491f27147495a442c9a
+    domain: binary_sensor
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 20
+  condition: []
+  action:
+  - type: turn_off
+    device_id: b534e916da63a063bd3438a2ce292feb
+    entity_id: 8f691d18b7d0553db0d064d277370613
+    domain: light
+  mode: restart
+- id: '1709157013802'
+  alias: Radiator off
+  description: ''
+  trigger:
+  - type: temperature
+    platform: device
+    device_id: 46ad2543db0f8c8911541a20a0edcfb7
+    entity_id: 7858aa6d6297b1e95c4c2c961cb3847a
+    domain: sensor
+    above: 21
+  condition: []
+  action:
+  - type: turn_off
+    device_id: 3ef8cef9cb3eaeb0f5cab527b53df55f
+    entity_id: switch.radiador
+    domain: switch
+  mode: single
+- id: '1709158247119'
+  alias: WLF-CBG disruption
+  description: 'Perturbation in the WLF -> CBG '
+  trigger:
+  - platform: state
+    entity_id:
+    - binary_sensor.perturbation_on_the_wlf_cbg_line
+    to: 'on'
+  - platform: time
+    at: 08:01:00
+  condition:
+  - condition: time
+    after: 08:00:00
+    before: 09:00:00
+    weekday:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+  - condition: state
+    entity_id: binary_sensor.perturbation_on_the_wlf_cbg_line
+    state: 'on'
+  action:
+  - service: notify.notify
+    data:
+      message: 'Service disruption '
+      title: "\U0001F682 WLF - CBG"
+  mode: single
+- id: '1709235737422'
+  alias: Encender garaje
+  description: Encender sonoff switch cuando detecte movimiento
+  trigger:
+  - type: motion
+    platform: device
+    device_id: f18b81c6c95ae446fe83fd2cc9d4005c
+    entity_id: f8dd93284b4ce1ee29c575f9e7594f30
+    domain: binary_sensor
+  condition: []
+  action:
+  - service: switch.turn_on
+    target:
+      entity_id: switch.sonoff_1000c1dbb0
+    data: {}
+  mode: restart
+- id: '1709235859527'
+  alias: Apagar garaje
+  description: Apagar luz cuando no detecte movimiento
+  trigger:
+  - type: no_motion
+    platform: device
+    device_id: f18b81c6c95ae446fe83fd2cc9d4005c
+    entity_id: f8dd93284b4ce1ee29c575f9e7594f30
+    domain: binary_sensor
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 30
+  condition: []
+  action:
+  - service: switch.turn_off
+    target:
+      entity_id: switch.sonoff_1000c1dbb0
+    data: {}
+  mode: restart
+- id: '1709235990612'
+  alias: Zapatero on
+  description: ''
+  trigger:
+  - type: opened
+    platform: device
+    device_id: 5214e340d28646e6b19fb9f3066d406b
+    entity_id: 4e4cac87ae154b11badf9cde2a15b951
+    domain: binary_sensor
+  condition: []
+  action:
+  - type: turn_on
+    device_id: 8fbb435c583645366dd56efa715628dd
+    entity_id: 9a8c16a537dff5f25881681f5de3cf39
+    domain: light
+  mode: single
+- id: '1709236052823'
+  alias: Zapatero off
+  description: ''
+  trigger:
+  - type: not_opened
+    platform: device
+    device_id: 5214e340d28646e6b19fb9f3066d406b
+    entity_id: 4e4cac87ae154b11badf9cde2a15b951
+    domain: binary_sensor
+  condition: []
+  action:
+  - type: turn_off
+    device_id: 8fbb435c583645366dd56efa715628dd
+    entity_id: 9a8c16a537dff5f25881681f5de3cf39
+    domain: light
+  mode: single
+- id: '1709236330454'
+  alias: Puerta zapatero timeout
+  description: Apaga la luz despues de un tiempo con la puerta abierta
+  trigger:
+  - type: opened
+    platform: device
+    device_id: 5214e340d28646e6b19fb9f3066d406b
+    entity_id: 4e4cac87ae154b11badf9cde2a15b951
+    domain: binary_sensor
+    for:
+      hours: 0
+      minutes: 5
+      seconds: 0
+  condition: []
+  action:
+  - type: turn_off
+    device_id: 8fbb435c583645366dd56efa715628dd
+    entity_id: 9a8c16a537dff5f25881681f5de3cf39
+    domain: light
+  mode: restart
+- id: '1709237436843'
+  alias: Car charging off
+  description: ''
+  trigger:
+  - platform: time
+    at: 05:20:00
+  condition: []
+  action:
+  - type: turn_off
+    device_id: e6998c098b392712f3f1dbcee7583c5a
+    entity_id: switch.psl_217243_charging_allowed
+    domain: switch
+  mode: single
+- id: '1709237660881'
+  alias: Car charging on
+  description: ''
+  trigger:
+  - platform: time
+    at: '23:40:00'
+  condition:
+  - type: is_plugged_in
+    condition: device
+    device_id: e6998c098b392712f3f1dbcee7583c5a
+    entity_id: f53c17c3f1385ef289a07969538694e3
+    domain: binary_sensor
+  action:
+  - type: turn_on
+    device_id: e6998c098b392712f3f1dbcee7583c5a
+    entity_id: 0e0e9b6af512eabedd7965b9d854a05e
+    domain: switch
+  mode: single
+- id: '1709376254517'
+  alias: Lavavajillas running
+  description: ''
+  trigger:
+  - platform: numeric_state
+    entity_id:
+    - sensor.lavavajillas_current
+    for:
+      hours: 0
+      minutes: 1
+      seconds: 0
+    above: 0.2
+  condition:
+  - condition: state
+    entity_id: input_select.lavavajillas
+    state: 'Off'
+  action:
+  - service: input_select.select_option
+    data:
+      option: Running
+    target:
+      entity_id: input_select.lavavajillas
+  mode: single
+- id: '1709376581762'
+  alias: Lavavajillas off
+  description: ''
+  trigger:
+  - platform: numeric_state
+    entity_id:
+    - sensor.lavavajillas_current
+    for:
+      hours: 0
+      minutes: 3
+      seconds: 0
+    below: 0.2
+  condition:
+  - condition: state
+    state: Running
+    entity_id: input_select.lavavajillas
+  action:
+  - service: notify.notify
+    data:
+      message: "\U0001F37D️ Lavavajillas acabado"
+  - service: input_select.select_option
+    data:
+      option: 'Off'
+    target:
+      entity_id: input_select.lavavajillas
+  mode: single
+- id: '1709463888355'
+  alias: Cocina offset
+  description: ''
+  use_blueprint:
+    path: sanderma/tado_temp_offset.yaml
+    input:
+      source_temp_sensor: sensor.study_temperature
+      target_tado: climate.cocina
+- id: '1709489402486'
+  alias: Dormitorio offset
+  description: ''
+  use_blueprint:
+    path: sanderma/tado_temp_offset.yaml
+    input:
+      source_temp_sensor: sensor.vindstyrka_temperature
+      target_tado: climate.dormitorio
+- id: '1709493229886'
+  alias: Heating away
+  description: ''
+  trigger:
+  - platform: state
+    entity_id:
+    - zone.home
+    to: '0'
+  condition: []
+  action:
+  - service: climate.set_preset_mode
+    data:
+      preset_mode: away
+    target:
+      entity_id: climate.bano
+  - service: notify.mobile_app_iphone_160
+    data:
+      message: "\U0001F525 Calefacción apagada"
+  mode: single
+- id: '1709500574892'
+  alias: Heating back home
+  description: ''
+  trigger:
+  - platform: state
+    entity_id:
+    - zone.home
+    from: '0'
+  condition: []
+  action:
+  - service: climate.set_preset_mode
+    data:
+      preset_mode: home
+    target:
+      entity_id: climate.bano
+  mode: single
+- id: '1710444795137'
+  alias: Salon temperature offset
+  description: ''
+  use_blueprint:
+    path: sanderma/tado_temp_offset.yaml
+    input:
+      source_temp_sensor: sensor.salon_temperature_2
+      target_tado: climate.salon
+- id: '1712516157295'
+  alias: Lavadora unemptied
+  description: ''
+  trigger:
+  - platform: numeric_state
+    entity_id: sensor.lavadora_current
+    for:
+      hours: 0
+      minutes: 3
+      seconds: 0
+    below: 0.2
+  condition:
+  - condition: state
+    entity_id: input_select.lavadora
+    state: Running
+  action:
+  - service: notify.notify
+    data:
+      title: "\U0001F455 Lavadora acabada"
+      message: La ropa esta limpia
+  - service: input_select.select_option
+    data:
+      option: Unemptied
+    target:
+      entity_id: input_select.lavadora
+  - service: grocy.add_generic
+    data:
+      entity_type: tasks
+      data:
+        name: Vaciar lavadora
+  mode: single
+- id: '1712673653480'
+  alias: Bin collection message
+  description: ''
+  trigger:
+  - platform: calendar
+    event: start
+    offset: '-5:30:0'
+    entity_id: calendar.bin_collection
+  condition: []
+  action:
+  - service: grocy.add_generic
+    metadata: {}
+    data:
+      entity_type: tasks
+      data:
+        name: Sacar {{ trigger.calendar_event.summary | replace(' Collection', '')
+          }}
+        due_date: '{{ now().date() }}'
+        assigned_to_user_id: '3'
+  - service: grocy.add_generic
+    metadata: {}
+    data:
+      entity_type: tasks
+      data:
+        name: Meter {{ trigger.calendar_event.summary | replace(' Collection', '')
+          }}
+        due_date: '{{ (now() + timedelta(days=1)).date() }}'
+        assigned_to_user_id: '3'
+  - service: notify.notify
+    metadata: {}
+    data:
+      data:
+        message: Sacar {{ trigger.calendar_event.summary | replace(' Collection',
+          '') }}
+  mode: parallel
+  max: 10
+- id: '1718309090496'
+  alias: Octopus Energy - Spin Wheel Of Fortune (dual)
+  description: ''
+  use_blueprint:
+    path: BottlecapDave/octopus_energy_spin_wheel_of_fortune_dual.yml.yaml
+    input:
+      wheel_of_fortune_spins_electricity: sensor.octopus_energy_a_6a48e44b_wheel_of_fortune_spins_electricity
+      wheel_of_fortune_spins_gas: sensor.octopus_energy_a_6a48e44b_wheel_of_fortune_spins_gas
+- id: '1723405331960'
+  alias: Package delivered
+  description: ''
+  trigger:
+  - platform: numeric_state
+    entity_id:
+    - sensor.mail_amazon_packages_delivered
+    above: 0
+  condition: []
+  action:
+  - action: notify.mobile_app_iphone_160
+    data:
+      message: "\U0001F4E6 Amazon package delivered"
+  mode: single
+- id: '1724532884633'
+  alias: bbc mp3
+  description: ''
+  trigger:
+  - platform: event
+    event_type: feedreader
+    event_data:
+      feed_url: https://podcast.voice.api.bbci.co.uk/rss/audio/p05hh4qy?api_key=Wbek5zSqxz0Hk1blo5IBqbd9SCWIfNbT
+  condition: []
+  action:
+  - action: input_text.set_value
+    metadata: {}
+    data:
+      value: '{{trigger.event[''data''][''links'']|selectattr(''type'',''eq'',''audio/mpeg'')|map(attribute=''href'')|first
+        }}'
+    target:
+      entity_id: input_text.bbc_mp3_url
+  mode: single

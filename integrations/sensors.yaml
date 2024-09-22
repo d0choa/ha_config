@@ -21,3 +21,4 @@ sensor:
     url: https://servicelayer3c.azure-api.net/wastecalendar/calendar/ical/100090139801
     startswith: Blue
     icon: mdi:recycle
+

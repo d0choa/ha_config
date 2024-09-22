@@ -49,4 +49,5 @@ ffmpeg-*.log
 .sonoff.json
 .shopping_list.json
 zigbee2mqtt/log/*
+zigbee2mqtt/state.json
 home-assistant-rollback.log

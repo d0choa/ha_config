@@ -1,13 +1,13 @@
-"""Support for PirateWeather (Dark Sky Compatable weather service."""
+"""Support for Pirate Weather (Dark Sky Compatable) weather service."""
+
+import datetime
 import logging
-
 from dataclasses import dataclass, field
+from typing import Literal, NamedTuple
 
-import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 import homeassistant.helpers.template as template_helper
-
-
+import voluptuous as vol
 from homeassistant.components.sensor import (
     PLATFORM_SCHEMA,
     SensorDeviceClass,
@@ -15,16 +15,10 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from typing import Literal, NamedTuple
-
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import StateType
-from homeassistant.helpers.typing import DiscoveryInfoType
-
 from homeassistant.const import (
     ATTR_ATTRIBUTION,
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     CONF_API_KEY,
     CONF_LATITUDE,
     CONF_LONGITUDE,
@@ -33,27 +27,28 @@ from homeassistant.const import (
     CONF_SCAN_INTERVAL,
     DEGREE,
     PERCENTAGE,
+    UV_INDEX,
+    UnitOfLength,
+    UnitOfPrecipitationDepth,
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
-    UnitOfLength,
     UnitOfVolumetricFlux,
-    UnitOfPrecipitationDepth,
-    UV_INDEX,
 )
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import DiscoveryInfoType, StateType
 
 from .const import (
+    ALL_CONDITIONS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ENTRY_WEATHER_COORDINATOR,
-    ALL_CONDITIONS,
-    PW_PLATFORMS,
     PW_PLATFORM,
+    PW_PLATFORMS,
     PW_PREVPLATFORM,
     PW_ROUND,
 )
-
-
 from .weather_update_coordinator import WeatherUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,7 +61,7 @@ CONF_LANGUAGE = "language"
 CONF_UNITS = "units"
 
 DEFAULT_LANGUAGE = "en"
-DEFAULT_NAME = "PirateWeather"
+DEFAULT_NAME = "Pirate Weather"
 
 DEPRECATED_SENSOR_TYPES = {
     "apparent_temperature_max",
@@ -159,6 +154,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "precip_intensity": PirateWeatherSensorEntityDescription(
         key="precip_intensity",
         name="Precip Intensity",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfVolumetricFlux.MILLIMETERS_PER_HOUR,
         us_unit=UnitOfPrecipitationDepth.INCHES,
         ca_unit=UnitOfVolumetricFlux.MILLIMETERS_PER_HOUR,
@@ -171,6 +167,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "precip_probability": PirateWeatherSensorEntityDescription(
         key="precip_probability",
         name="Precip Probability",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=PERCENTAGE,
         us_unit=PERCENTAGE,
         ca_unit=PERCENTAGE,
@@ -184,6 +181,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="precip_accumulation",
         name="Precip Accumulation",
         device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfLength.CENTIMETERS,
         us_unit=UnitOfLength.INCHES,
         ca_unit=UnitOfLength.CENTIMETERS,
@@ -191,6 +189,48 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         uk2_unit=UnitOfLength.CENTIMETERS,
         suggested_display_precision=4,
         icon="mdi:weather-snowy",
+        forecast_mode=["hourly", "daily"],
+    ),
+    "liquid_accumulation": PirateWeatherSensorEntityDescription(
+        key="liquid_accumulation",
+        name="Liquid Accumulation",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        si_unit=UnitOfLength.CENTIMETERS,
+        us_unit=UnitOfLength.INCHES,
+        ca_unit=UnitOfLength.CENTIMETERS,
+        uk_unit=UnitOfLength.CENTIMETERS,
+        uk2_unit=UnitOfLength.CENTIMETERS,
+        suggested_display_precision=4,
+        icon="mdi:weather-rainy",
+        forecast_mode=["hourly", "daily"],
+    ),
+    "snow_accumulation": PirateWeatherSensorEntityDescription(
+        key="snow_accumulation",
+        name="Snow Accumulation",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        si_unit=UnitOfLength.CENTIMETERS,
+        us_unit=UnitOfLength.INCHES,
+        ca_unit=UnitOfLength.CENTIMETERS,
+        uk_unit=UnitOfLength.CENTIMETERS,
+        uk2_unit=UnitOfLength.CENTIMETERS,
+        suggested_display_precision=4,
+        icon="mdi:weather-snowy",
+        forecast_mode=["hourly", "daily"],
+    ),
+    "ice_accumulation": PirateWeatherSensorEntityDescription(
+        key="ice_accumulation",
+        name="Ice Accumulation",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        si_unit=UnitOfLength.CENTIMETERS,
+        us_unit=UnitOfLength.INCHES,
+        ca_unit=UnitOfLength.CENTIMETERS,
+        uk_unit=UnitOfLength.CENTIMETERS,
+        uk2_unit=UnitOfLength.CENTIMETERS,
+        suggested_display_precision=4,
+        icon="mdi:weather-snowy-rainy",
         forecast_mode=["hourly", "daily"],
     ),
     "temperature": PirateWeatherSensorEntityDescription(
@@ -236,6 +276,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="wind_speed",
         name="Wind Speed",
         device_class=SensorDeviceClass.WIND_SPEED,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfSpeed.METERS_PER_SECOND,
         us_unit=UnitOfSpeed.MILES_PER_HOUR,
         ca_unit=UnitOfSpeed.KILOMETERS_PER_HOUR,
@@ -248,6 +289,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "wind_bearing": PirateWeatherSensorEntityDescription(
         key="wind_bearing",
         name="Wind Bearing",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=DEGREE,
         us_unit=DEGREE,
         ca_unit=DEGREE,
@@ -261,6 +303,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="wind_gust",
         name="Wind Gust",
         device_class=SensorDeviceClass.WIND_SPEED,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfSpeed.METERS_PER_SECOND,
         us_unit=UnitOfSpeed.MILES_PER_HOUR,
         ca_unit=UnitOfSpeed.KILOMETERS_PER_HOUR,
@@ -273,6 +316,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "cloud_cover": PirateWeatherSensorEntityDescription(
         key="cloud_cover",
         name="Cloud Coverage",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=PERCENTAGE,
         us_unit=PERCENTAGE,
         ca_unit=PERCENTAGE,
@@ -311,6 +355,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "visibility": PirateWeatherSensorEntityDescription(
         key="visibility",
         name="Visibility",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfLength.KILOMETERS,
         us_unit=UnitOfLength.MILES,
         ca_unit=UnitOfLength.KILOMETERS,
@@ -332,10 +377,55 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         suggested_display_precision=2,
         forecast_mode=["currently", "hourly", "daily"],
     ),
+    "fire_index": PirateWeatherSensorEntityDescription(
+        key="fire_index",
+        name="Fire Index",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        icon="mdi:fire",
+        forecast_mode=["currently", "hourly"],
+    ),
+    "fire_index_max": PirateWeatherSensorEntityDescription(
+        key="fire_index_max",
+        name="Fire Index Max",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        icon="mdi:fire",
+        forecast_mode=["daily"],
+    ),
+    "smoke": PirateWeatherSensorEntityDescription(
+        key="smoke",
+        name="Smoke",
+        device_class=SensorDeviceClass.PM25,
+        state_class=SensorStateClass.MEASUREMENT,
+        si_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        us_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        ca_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        uk_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        uk2_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        suggested_display_precision=2,
+        icon="mdi:smoke",
+        forecast_mode=["currently", "hourly"],
+    ),
+    "smoke_max": PirateWeatherSensorEntityDescription(
+        key="smoke_max",
+        name="Smoke Max",
+        device_class=SensorDeviceClass.PM25,
+        state_class=SensorStateClass.MEASUREMENT,
+        si_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        us_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        ca_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        uk_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        uk2_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        suggested_display_precision=2,
+        icon="mdi:smoke",
+        forecast_mode=["daily"],
+    ),
     "apparent_temperature_max": PirateWeatherSensorEntityDescription(
         key="apparent_temperature_max",
         name="Daily High Apparent Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -348,6 +438,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="apparent_temperature_high",
         name="Daytime High Apparent Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -356,10 +447,18 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         suggested_display_precision=2,
         forecast_mode=["daily"],
     ),
+    "apparent_temperature_high_time": PirateWeatherSensorEntityDescription(
+        key="apparent_temperature_high_time",
+        name="Daytime High Apparent Temperature Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=["daily"],
+    ),
     "apparent_temperature_min": PirateWeatherSensorEntityDescription(
         key="apparent_temperature_min",
         name="Daily Low Apparent Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -372,6 +471,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="apparent_temperature_low",
         name="Overnight Low Apparent Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -380,10 +480,18 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         suggested_display_precision=2,
         forecast_mode=["daily"],
     ),
+    "apparent_temperature_low_time": PirateWeatherSensorEntityDescription(
+        key="apparent_temperature_low_time",
+        name="Overnight Low Apparent Temperature Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=["daily"],
+    ),
     "temperature_max": PirateWeatherSensorEntityDescription(
         key="temperature_max",
         name="Daily High Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -396,18 +504,27 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="temperature_high",
         name="Daytime High Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
         uk_unit=UnitOfTemperature.CELSIUS,
         uk2_unit=UnitOfTemperature.CELSIUS,
         suggested_display_precision=2,
+        forecast_mode=["daily"],
+    ),
+    "temperature_high_time": PirateWeatherSensorEntityDescription(
+        key="temperature_high_time",
+        name="Daytime High Temperature Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
         forecast_mode=["daily"],
     ),
     "temperature_min": PirateWeatherSensorEntityDescription(
         key="temperature_min",
         name="Daily Low Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -416,10 +533,18 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         suggested_display_precision=2,
         forecast_mode=["daily"],
     ),
+    "temperature_min_time": PirateWeatherSensorEntityDescription(
+        key="temperature_min_time",
+        name="Daily Low Temperature Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=["daily"],
+    ),
     "temperature_low": PirateWeatherSensorEntityDescription(
         key="temperature_low",
         name="Overnight Low Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfTemperature.CELSIUS,
         us_unit=UnitOfTemperature.FAHRENHEIT,
         ca_unit=UnitOfTemperature.CELSIUS,
@@ -431,6 +556,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "precip_intensity_max": PirateWeatherSensorEntityDescription(
         key="precip_intensity_max",
         name="Daily Max Precip Intensity",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UnitOfVolumetricFlux.MILLIMETERS_PER_HOUR,
         us_unit=UnitOfPrecipitationDepth.INCHES,
         ca_unit=UnitOfVolumetricFlux.MILLIMETERS_PER_HOUR,
@@ -443,6 +569,7 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
     "uv_index": PirateWeatherSensorEntityDescription(
         key="uv_index",
         name="UV Index",
+        state_class=SensorStateClass.MEASUREMENT,
         si_unit=UV_INDEX,
         us_unit=UV_INDEX,
         ca_unit=UV_INDEX,
@@ -463,12 +590,14 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="sunrise_time",
         name="Sunrise",
         icon="mdi:white-balance-sunny",
+        device_class=SensorDeviceClass.TIMESTAMP,
         forecast_mode=["daily"],
     ),
     "sunset_time": PirateWeatherSensorEntityDescription(
         key="sunset_time",
         name="Sunset",
         icon="mdi:weather-night",
+        device_class=SensorDeviceClass.TIMESTAMP,
         forecast_mode=["daily"],
     ),
     "alerts": PirateWeatherSensorEntityDescription(
@@ -481,7 +610,57 @@ SENSOR_TYPES: dict[str, PirateWeatherSensorEntityDescription] = {
         key="time",
         name="Time",
         icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
         forecast_mode=["currently", "hourly", "daily"],
+    ),
+    "hrrr_subh_update_time": PirateWeatherSensorEntityDescription(
+        key="hrrr_subh",
+        name="HRRR SubHourly Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
+    ),
+    "hrrr_0_18_update_time": PirateWeatherSensorEntityDescription(
+        key="hrrr_0-18",
+        name="HRRR 0-18 Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
+    ),
+    "nbm_update_time": PirateWeatherSensorEntityDescription(
+        key="nbm",
+        name="NBM Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
+    ),
+    "nbm_fire_update_time": PirateWeatherSensorEntityDescription(
+        key="nbm_fire",
+        name="NBM Fire Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
+    ),
+    "hrrr_18_48_update_time": PirateWeatherSensorEntityDescription(
+        key="hrrr_18-48",
+        name="HRRR 18-48 Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
+    ),
+    "gfs_update_time": PirateWeatherSensorEntityDescription(
+        key="gfs",
+        name="GFS Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
+    ),
+    "gefs_update_time": PirateWeatherSensorEntityDescription(
+        key="gefs",
+        name="GEFS  Update Time",
+        icon="mdi:clock-time-three-outline",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        forecast_mode=[],
     ),
 }
 
@@ -656,7 +835,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Pirate Weather sensor entities based on a config entry."""
-
     domain_data = hass.data[DOMAIN][config_entry.entry_id]
 
     name = domain_data[CONF_NAME]
@@ -740,7 +918,7 @@ async def async_setup_entry(
 
 
 class PirateWeatherSensor(SensorEntity):
-    """Class for an PirateWeather sensor."""
+    """Class for an Pirate Weather sensor."""
 
     # _attr_should_poll = False
     _attr_attribution = ATTRIBUTION
@@ -761,7 +939,6 @@ class PirateWeatherSensor(SensorEntity):
         """Initialize the sensor."""
         self.client_name = name
 
-        description = description
         self.entity_description = description
         self.description = description
 
@@ -798,7 +975,7 @@ class PirateWeatherSensor(SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if weather data is available from PirateWeather."""
+        """Return if weather data is available from Pirate Weather."""
         return self._weather_coordinator.data is not None
 
     @property
@@ -855,15 +1032,13 @@ class PirateWeatherSensor(SensorEntity):
         if self.type == "alerts":
             extraATTR = self._alerts
             extraATTR[ATTR_ATTRIBUTION] = ATTRIBUTION
-
-            return extraATTR
         else:
-            return {ATTR_ATTRIBUTION: ATTRIBUTION}
+            extraATTR = {ATTR_ATTRIBUTION: ATTRIBUTION}
+        return extraATTR
 
     @property
     def native_value(self) -> StateType:
         """Return the state of the device."""
-
         self.update_unit_of_measurement()
 
         if self.type == "alerts":
@@ -891,6 +1066,22 @@ class PirateWeatherSensor(SensorEntity):
 
             self._alerts = alerts
             native_val = len(data)
+
+        elif self.type in [
+            "hrrr_subh_update_time",
+            "hrrr_0_18_update_time",
+            "nbm_update_time",
+            "nbm_fire_update_time",
+            "hrrr_18_48_update_time",
+            "gfs_update_time",
+            "gefs_update_time",
+        ]:
+            model_time_string = self._weather_coordinator.data.json["flags"][
+                "sourceTimes"
+            ][self.entity_description.key]
+            native_val = datetime.datetime.strptime(
+                model_time_string[0:-1], "%Y-%m-%d %H"
+            ).replace(tzinfo=datetime.UTC)
 
         elif self.type == "minutely_summary":
             native_val = getattr(
@@ -971,6 +1162,9 @@ class PirateWeatherSensor(SensorEntity):
         if self.requestUnits in ["us"]:
             if self.type in [
                 "precip_accumulation",
+                "liquid_accumulation",
+                "snow_accumulation",
+                "ice_accumulation",
             ]:
                 state = state * 0.0393701
 
@@ -1005,7 +1199,19 @@ class PirateWeatherSensor(SensorEntity):
             ]:
                 state = state * 3.6
 
+        # Convert unix times to datetimes times
         if self.type in [
+            "temperature_high_time",
+            "temperature_min_time",
+            "apparent_temperature_high_time",
+            "apparent_temperature_low_time",
+            "sunrise_time",
+            "sunset_time",
+            "time",
+        ]:
+            outState = datetime.datetime.fromtimestamp(state, datetime.UTC)
+
+        elif self.type in [
             "dew_point",
             "temperature",
             "apparent_temperature",
@@ -1019,11 +1225,15 @@ class PirateWeatherSensor(SensorEntity):
             "apparent_temperature_max",
             "pressure",
             "ozone",
+            "fire_index",
+            "fire_index_max",
             "uv_index",
             "wind_speed",
             "wind_gust",
             "visibility",
             "nearest_storm_distance",
+            "smoke",
+            "smoke_max",
         ]:
             if roundingVal == 0:
                 outState = int(round(state, roundingVal))
@@ -1032,6 +1242,9 @@ class PirateWeatherSensor(SensorEntity):
 
         elif self.type in [
             "precip_accumulation",
+            "liquid_accumulation",
+            "snow_accumulation",
+            "ice_accumulation",
             "precip_intensity",
             "precip_intensity_max",
         ]:

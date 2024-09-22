@@ -3,9 +3,19 @@ DOMAIN = "audiconnect"
 CONF_VIN = "vin"
 CONF_CARNAME = "carname"
 CONF_ACTION = "action"
+CONF_CLIMATE_TEMP_F = "temp_f"
+CONF_CLIMATE_TEMP_C = "temp_c"
+CONF_CLIMATE_GLASS = "glass_heating"
+CONF_CLIMATE_SEAT_FL = "seat_fl"
+CONF_CLIMATE_SEAT_FR = "seat_fr"
+CONF_CLIMATE_SEAT_RL = "seat_rl"
+CONF_CLIMATE_SEAT_RR = "seat_rr"
+CONF_SCAN_INITIAL = "scan_initial"
+CONF_SCAN_ACTIVE = "scan_active"
 
-MIN_UPDATE_INTERVAL = 5
-DEFAULT_UPDATE_INTERVAL = 10
+MIN_UPDATE_INTERVAL = 15
+DEFAULT_UPDATE_INTERVAL = 15
+UPDATE_SLEEP = 5
 
 CONF_SPIN = "spin"
 CONF_REGION = "region"
@@ -26,6 +36,7 @@ RESOURCES = [
     "range",
     "service_inspection_time",
     "service_inspection_distance",
+    "service_adblue_distance",
     "oil_change_time",
     "oil_change_distance",
     "oil_level",
@@ -65,4 +76,16 @@ COMPONENTS = {
     "lock": "lock",
     "device_tracker": "device_tracker",
     "switch": "switch",
+}
+
+REGION_EUROPE: str = "DE"
+REGION_CANADA: str = "CA"
+REGION_USA: str = "US"
+REGION_CHINA: str = "CN"
+
+REGIONS = {
+    1: REGION_EUROPE,
+    2: REGION_CANADA,
+    3: REGION_USA,
+    4: REGION_CHINA,
 }

@@ -5,6 +5,7 @@
     "@mattrayner"
   ],
   "config_flow": true,
+  "dependencies": ["http"],
   "dhcp": [
     {
       "hostname": "podpoint-*",
@@ -563,12 +564,12 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/mattrayner/pod-point-home-assistant-component/issues",
-  "quality_scale": "gold",
+  "quality_scale": "silver",
   "requirements": [
-    "podpointclient==1.4.3",
+    "podpointclient==1.6.1",
     "StrEnum>=0.4,<0.5",
     "aiodiscover",
     "scapy"
   ],
-  "version": "1.2.2"
+  "version": "2.0.5"
 }

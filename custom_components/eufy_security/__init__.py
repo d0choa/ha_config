@@ -5,6 +5,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Config, HomeAssistant
+from homeassistant.components.persistent_notification import create
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.event import async_track_time_interval
@@ -48,9 +49,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     coordinator = hass.data[DOMAIN][COORDINATOR] = hass.data[DOMAIN].get(COORDINATOR, EufySecurityDataUpdateCoordinator(hass, config_entry))
 
     await coordinator.initialize()
+    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
     for platform in PLATFORMS:
         coordinator.platforms.append(platform.value)
-        hass.async_add_job(hass.config_entries.async_forward_entry_setup(config_entry, platform.value))
 
     async def update(event_time_utc):
         local_coordinator = hass.data[DOMAIN][COORDINATOR]
@@ -65,11 +66,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     """unload active entities"""
     _LOGGER.debug(f"async_unload_entry 1")
     coordinator = hass.data[DOMAIN][COORDINATOR]
-    unloaded = all(
-        await asyncio.gather(
-            *[hass.config_entries.async_forward_entry_unload(config_entry, platform) for platform in coordinator.platforms]
-        )
-    )
+    unloaded = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
 
     if unloaded:
         await coordinator.disconnect()
@@ -93,7 +90,7 @@ async def async_remove_config_entry_device(hass: HomeAssistant, config_entry: Co
     coordinator = hass.data[DOMAIN][COORDINATOR]
     if serial_no in coordinator.devices or serial_no in coordinator.stations:
         _LOGGER.debug(f"async_remove_config_entry_device error exists {serial_no}")
-        hass.components.persistent_notification.create(f"Device is still accessible on account, cannot be deleted!", title="Eufy Security - Error", notification_id="eufy_security_delete_device_error")
+        create(hass, f"Device is still accessible on account, cannot be deleted!", title="Eufy Security - Error", notification_id="eufy_security_delete_device_error")
         return False
     _LOGGER.debug(f"async_remove_config_entry_device deleted {serial_no}")
     return True

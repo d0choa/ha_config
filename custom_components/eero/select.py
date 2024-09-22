@@ -25,14 +25,14 @@ class EeroSelectEntityDescription(EeroEntityDescription, SelectEntityDescription
 
 SELECT_DESCRIPTIONS: list[EeroSelectEntityDescription] = [
     EeroSelectEntityDescription(
-        key="preferred_update_hour",
-        name="Preferred Update Time",
-        options="preferred_update_hour_options",
-    ),
-    EeroSelectEntityDescription(
         key="nightlight_mode",
         name="Nightlight Mode",
         options="nightlight_mode_options",
+    ),
+    EeroSelectEntityDescription(
+        key="preferred_update_hour",
+        name="Preferred Update Time",
+        options="preferred_update_hour_options",
     ),
 ]
 
@@ -54,7 +54,7 @@ async def async_setup_entry(
     for network in coordinator.data.networks:
         if network.id in entry[CONF_NETWORKS]:
             for key, description in SUPPORTED_KEYS.items():
-                if description.premium_type and not network.premium_status_active:
+                if description.premium_type and not network.premium_enabled:
                     continue
                 elif hasattr(network, key):
                     entities.append(
@@ -69,7 +69,7 @@ async def async_setup_entry(
             for eero in network.eeros:
                 if eero.id in entry[CONF_EEROS]:
                     for key, description in SUPPORTED_KEYS.items():
-                        if description.premium_type and not network.premium_status_active:
+                        if description.premium_type and not network.premium_enabled:
                             continue
                         elif hasattr(eero, key):
                             entities.append(

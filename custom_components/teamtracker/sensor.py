@@ -112,11 +112,6 @@ async def async_setup_platform(
 
     if DOMAIN not in hass.data.keys():
         hass.data.setdefault(DOMAIN, {})
-        config.entry_id = slugify(f"{config.get(CONF_TEAM_ID)}")
-        config.data = config
-    else:
-        config.entry_id = slugify(f"{config.get(CONF_TEAM_ID)}")
-        config.data = config
 
     # Setup the data coordinator
     coordinator = TeamTrackerDataUpdateCoordinator(
@@ -127,10 +122,11 @@ async def async_setup_platform(
     # Fetch initial data so we have data when entities subscribe
     await coordinator.async_refresh()
 
-    hass.data[DOMAIN][config.entry_id] = {
+    # For YAML, use sensor name for index.  Assumes sensor_name = entity_name
+    hass.data[DOMAIN][sensor_name] = {
         COORDINATOR: coordinator,
     }
-    async_add_entities([TeamTrackerScoresSensor(hass, config)], True)
+    async_add_entities([TeamTrackerScoresSensor(hass, None, config)], True)
 
 
 async def async_setup_entry(
@@ -152,34 +148,49 @@ async def async_setup_entry(
     if entry.options:
         config.update(entry.options)
 
-    async_add_entities([TeamTrackerScoresSensor(hass, entry)], True)
+    async_add_entities([TeamTrackerScoresSensor(hass, entry, None)], True)
 
 
 class TeamTrackerScoresSensor(CoordinatorEntity):
     """Representation of a Sensor."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, config: ConfigType) -> None:
         """Initialize the sensor."""
-        super().__init__(hass.data[DOMAIN][entry.entry_id][COORDINATOR])
 
-        sport_path = entry.data.get(CONF_SPORT_PATH, DEFAULT_SPORT_PATH)
+        if entry is not None:  # GUI setup, use entry_id as index
+            entry_id = entry.entry_id
+            sensor_coordinator = hass.data[DOMAIN][entry_id][COORDINATOR]
+            super().__init__(sensor_coordinator)
+            sport_path = entry.data.get(CONF_SPORT_PATH, DEFAULT_SPORT_PATH)
+            sensor_name = entry.data[CONF_NAME]
+            
+        else:  # YAML setup, use sensor_name as index (assumes sensor_name = entity_id)
+            sensor_name = config[CONF_NAME]
+            entry_id = slugify(f"{config.get(CONF_TEAM_ID)}")
+            sensor_coordinator = hass.data[DOMAIN][sensor_name][COORDINATOR]
+            super().__init__(sensor_coordinator)
+            try:
+                sport_path = config[CONF_SPORT_PATH]
+            except:
+                sport_path = DEFAULT_SPORT_PATH
+
         if sport_path == DEFAULT_SPORT_PATH:
             _LOGGER.debug(
                 "%s:  Initializing sensor values.  SPORT_PATH not set.",
-                entry.data[CONF_NAME],
+                sensor_name,
             )
 
         icon = SPORT_ICON_MAP.get(sport_path, DEFAULT_ICON)
         if icon == DEFAULT_ICON:
             _LOGGER.debug(
                 "%s:  Initializing sensor values.  Sport icon not found for sport '%s'",
-                entry.data[CONF_NAME],
+                sensor_name,
                 sport_path,
             )
 
-        self.coordinator = hass.data[DOMAIN][entry.entry_id][COORDINATOR]
-        self._config = entry
-        self._name = entry.data[CONF_NAME]
+        self.coordinator = sensor_coordinator
+        self._entry_id = entry_id
+        self._name = sensor_name
         self._icon = icon
         self._state = "PRE"
 
@@ -190,8 +201,10 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         self._opponent_abbr = None
 
         self._event_name = None
+        self._event_url = None
         self._date = None
         self._kickoff_in = None
+        self._series_summary = None
         self._venue = None
         self._location = None
         self._tv_network = None
@@ -204,6 +217,7 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         self._team_rank = None
         self._team_homeaway = None
         self._team_logo = None
+        self._team_url = None
         self._team_colors = None
         self._team_score = None
         self._team_win_probability = None
@@ -216,6 +230,7 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         self._opponent_rank = None
         self._opponent_homeaway = None
         self._opponent_logo = None
+        self._opponent_url = None
         self._opponent_colors = None
         self._opponent_score = None
         self._opponent_win_probability = None
@@ -251,7 +266,7 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         """
         Return a unique, Home Assistant friendly identifier for this entity.
         """
-        return f"{slugify(self._name)}_{self._config.entry_id}"
+        return f"{slugify(self._name)}_{self._entry_id}"
 
     @property
     def name(self) -> str:
@@ -291,8 +306,10 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         attrs["opponent_abbr"] = self.coordinator.data["opponent_abbr"]
 
         attrs["event_name"] = self.coordinator.data["event_name"]
+        attrs["event_url"] = self.coordinator.data["event_url"]
         attrs["date"] = self.coordinator.data["date"]
         attrs["kickoff_in"] = self.coordinator.data["kickoff_in"]
+        attrs["series_summary"] = self.coordinator.data["series_summary"]
         attrs["venue"] = self.coordinator.data["venue"]
         attrs["location"] = self.coordinator.data["location"]
         attrs["tv_network"] = self.coordinator.data["tv_network"]
@@ -305,6 +322,7 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         attrs["team_rank"] = self.coordinator.data["team_rank"]
         attrs["team_homeaway"] = self.coordinator.data["team_homeaway"]
         attrs["team_logo"] = self.coordinator.data["team_logo"]
+        attrs["team_url"] = self.coordinator.data["team_url"]
         attrs["team_colors"] = self.coordinator.data["team_colors"]
         #        attrs["team_colors_rbg"] = self.colors2rgb(self.coordinator.data["team_colors"])
         attrs["team_score"] = self.coordinator.data["team_score"]
@@ -318,6 +336,7 @@ class TeamTrackerScoresSensor(CoordinatorEntity):
         attrs["opponent_rank"] = self.coordinator.data["opponent_rank"]
         attrs["opponent_homeaway"] = self.coordinator.data["opponent_homeaway"]
         attrs["opponent_logo"] = self.coordinator.data["opponent_logo"]
+        attrs["opponent_url"] = self.coordinator.data["opponent_url"]
         attrs["opponent_colors"] = self.coordinator.data["opponent_colors"]
         #        attrs["opponent_colors_rgb"] = self.colors2rgb(self.coordinator.data["opponent_colors"])
         attrs["opponent_score"] = self.coordinator.data["opponent_score"]

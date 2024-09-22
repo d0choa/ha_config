@@ -1,22 +1,15 @@
-"""Support for the Pirate Weather (PW) service."""
+"""Support for the Pirate Weather service."""
+
 from __future__ import annotations
 
 import logging
 
-import voluptuous as vol
-
 import homeassistant.helpers.config_validation as cv
-from homeassistant.util.dt import utc_from_timestamp
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from .weather_update_coordinator import WeatherUpdateCoordinator
-from homeassistant.helpers.typing import DiscoveryInfoType
-
-
+import voluptuous as vol
 from homeassistant.components.weather import (
     ATTR_CONDITION_CLEAR_NIGHT,
     ATTR_CONDITION_CLOUDY,
+    ATTR_CONDITION_EXCEPTIONAL,
     ATTR_CONDITION_FOG,
     ATTR_CONDITION_HAIL,
     ATTR_CONDITION_LIGHTNING,
@@ -26,14 +19,12 @@ from homeassistant.components.weather import (
     ATTR_CONDITION_SNOWY_RAINY,
     ATTR_CONDITION_SUNNY,
     ATTR_CONDITION_WINDY,
-    ATTR_CONDITION_EXCEPTIONAL,
     PLATFORM_SCHEMA,
     Forecast,
-    WeatherEntityFeature,
     SingleCoordinatorWeatherEntity,
+    WeatherEntityFeature,
 )
-
-
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_LATITUDE,
@@ -41,25 +32,30 @@ from homeassistant.const import (
     CONF_MODE,
     CONF_NAME,
     CONF_SCAN_INTERVAL,
+    UnitOfLength,
     UnitOfPrecipitationDepth,
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
-    UnitOfLength,
 )
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import DiscoveryInfoType
+from homeassistant.util.dt import utc_from_timestamp
 
 from .const import (
+    CONF_UNITS,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    FORECAST_MODES,
-    CONF_UNITS,
     ENTRY_WEATHER_COORDINATOR,
-    PW_PLATFORMS,
+    FORECAST_MODES,
     PW_PLATFORM,
+    PW_PLATFORMS,
     PW_PREVPLATFORM,
     PW_ROUND,
 )
+from .weather_update_coordinator import WeatherUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,6 +89,7 @@ MAP_CONDITION = {
     "hail": ATTR_CONDITION_HAIL,
     "thunderstorm": ATTR_CONDITION_LIGHTNING,
     "tornado": ATTR_CONDITION_EXCEPTIONAL,
+    "none": ATTR_CONDITION_EXCEPTIONAL,
 }
 
 CONF_UNITS = "units"
@@ -130,7 +127,7 @@ def _map_daily_forecast(forecast) -> Forecast:
     return {
         "datetime": utc_from_timestamp(forecast.d.get("time")).isoformat(),
         "condition": MAP_CONDITION.get(forecast.d.get("icon")),
-        "native_temperature": forecast.d.get("temperatureMax"),
+        "native_temperature": forecast.d.get("temperatureHigh"),
         "native_templow": forecast.d.get("temperatureLow"),
         "native_precipitation": forecast.d.get("precipAccumulation") * 10,
         "precipitation_probability": round(
@@ -139,6 +136,7 @@ def _map_daily_forecast(forecast) -> Forecast:
         "humidity": round(forecast.d.get("humidity") * 100, 2),
         "cloud_coverage": round(forecast.d.get("cloudCover") * 100, 0),
         "native_wind_speed": round(forecast.d.get("windSpeed"), 2),
+        "native_wind_gust_speed": round(forecast.d.get("windGust"), 2),
         "wind_bearing": round(forecast.d.get("windBearing"), 0),
     }
 
@@ -153,6 +151,7 @@ def _map_hourly_forecast(forecast) -> Forecast:
         "native_pressure": forecast.d.get("pressure"),
         "native_wind_speed": round(forecast.d.get("windSpeed"), 2),
         "wind_bearing": round(forecast.d.get("windBearing"), 0),
+        "native_wind_gust_speed": round(forecast.d.get("windGust"), 2),
         "humidity": round(forecast.d.get("humidity") * 100, 2),
         "native_precipitation": round(forecast.d.get("precipIntensity"), 2),
         "precipitation_probability": round(
@@ -188,7 +187,7 @@ async def async_setup_entry(
 
 
 class PirateWeather(SingleCoordinatorWeatherEntity[WeatherUpdateCoordinator]):
-    """Implementation of an PirateWeather sensor."""
+    """Implementation of an Pirate Weather sensor."""
 
     _attr_attribution = ATTRIBUTION
     _attr_should_poll = False
@@ -234,7 +233,7 @@ class PirateWeather(SingleCoordinatorWeatherEntity[WeatherUpdateCoordinator]):
 
     @property
     def supported_features(self) -> WeatherEntityFeature:
-        """Determine supported features based on available data sets reported by WeatherKit."""
+        """Determine supported features based on available data sets reported by Pirate Weather."""
         features = WeatherEntityFeature(0)
 
         features |= WeatherEntityFeature.FORECAST_DAILY
@@ -243,7 +242,7 @@ class PirateWeather(SingleCoordinatorWeatherEntity[WeatherUpdateCoordinator]):
 
     @property
     def available(self):
-        """Return if weather data is available from PirateWeather."""
+        """Return if weather data is available from Pirate Weather."""
         return self._weather_coordinator.data is not None
 
     @property
@@ -264,6 +263,15 @@ class PirateWeather(SingleCoordinatorWeatherEntity[WeatherUpdateCoordinator]):
         return round(temperature, 2)
 
     @property
+    def cloud_coverage(self):
+        """Return the cloud coverage."""
+        cloudCover = (
+            self._weather_coordinator.data.currently().d.get("cloudCover") * 100.0
+        )
+
+        return round(cloudCover, 2)
+
+    @property
     def humidity(self):
         """Return the humidity."""
         humidity = self._weather_coordinator.data.currently().d.get("humidity") * 100.0
@@ -276,6 +284,13 @@ class PirateWeather(SingleCoordinatorWeatherEntity[WeatherUpdateCoordinator]):
         windspeed = self._weather_coordinator.data.currently().d.get("windSpeed")
 
         return round(windspeed, 2)
+
+    @property
+    def native_wind_gust_speed(self):
+        """Return the wind gust speed."""
+        windGust = self._weather_coordinator.data.currently().d.get("windGust")
+
+        return round(windGust, 2)
 
     @property
     def wind_bearing(self):
@@ -306,7 +321,6 @@ class PirateWeather(SingleCoordinatorWeatherEntity[WeatherUpdateCoordinator]):
     @property
     def condition(self):
         """Return the weather condition."""
-
         return MAP_CONDITION.get(
             self._weather_coordinator.data.currently().d.get("icon")
         )

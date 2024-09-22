@@ -34,6 +34,12 @@ BUTTON_DESCRIPTIONS: list[EeroButtonEntityDescription] = [
         device_class=ButtonDeviceClass.RESTART,
         request_refresh=False,
     ),
+    EeroButtonEntityDescription(
+        key="run_speed_test",
+        name="Run Speed Test",
+        icon="mdi:speedometer",
+        request_refresh=False,
+    ),
 ]
 
 
@@ -54,7 +60,7 @@ async def async_setup_entry(
     for network in coordinator.data.networks:
         if network.id in entry[CONF_NETWORKS]:
             for key, description in SUPPORTED_KEYS.items():
-                if description.premium_type and not network.premium_status_active:
+                if description.premium_type and not network.premium_enabled:
                     continue
                 elif hasattr(network, key):
                     entities.append(
@@ -69,7 +75,7 @@ async def async_setup_entry(
             for eero in network.eeros:
                 if eero.id in entry[CONF_EEROS]:
                     for key, description in SUPPORTED_KEYS.items():
-                        if description.premium_type and not network.premium_status_active:
+                        if description.premium_type and not network.premium_enabled:
                             continue
                         elif hasattr(eero, key):
                             entities.append(

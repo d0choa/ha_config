@@ -1,106 +1,175 @@
-from __future__ import annotations
-
+from abc import abstractmethod
 import typing
 
 from homeassistant.components import switch
 
 from . import meross_entity as me
-from .merossclient import const as mc  # mEROSS cONST
+from .merossclient import const as mc, extract_dict_payloads, namespaces as mn
 
 if typing.TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-    from .meross_device import MerossDevice
-    from .merossclient import MerossDeviceDescriptor
-
-try:
-    SwitchDeviceClass = switch.SwitchDeviceClass  # type: ignore
-except Exception:
-    from .helpers import StrEnum
-
-    class SwitchDeviceClass(StrEnum):
-        OUTLET = "outlet"
-        SWITCH = "switch"
+    from .meross_device import DigestInitReturnType, MerossDevice, MerossDeviceBase
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, config_entry: ConfigEntry, async_add_devices
+    hass: "HomeAssistant", config_entry: "ConfigEntry", async_add_devices
 ):
     me.platform_setup_entry(hass, config_entry, async_add_devices, switch.DOMAIN)
 
 
-class MLSwitch(me.MerossToggle, switch.SwitchEntity):
+class MLSwitchBase(me.MerossBinaryEntity, switch.SwitchEntity):
     """
-    generic plugs (single/multi outlet and so)
+    Base (almost abstract) entity for switches. This has 2 main implementations:
+    - MLSwitch: switch representing some device feature (an actual output or a config option)
+    - MLConfigSwitch: switch used to configure a meross_lan feature/option
     """
 
     PLATFORM = switch.DOMAIN
-    DeviceClass = SwitchDeviceClass
+    DeviceClass = switch.SwitchDeviceClass
 
-    @staticmethod
-    def build_for_device(device: MerossDevice, channel: object, namespace: str):
-        return MLSwitch(
-            device, channel, None, SwitchDeviceClass.OUTLET, namespace
+
+class MLConfigSwitch(me.MEAlwaysAvailableMixin, MLSwitchBase):
+    """
+    Switch entity not related to any device feature but used to configure
+    behaviors for meross_lan entities.
+    """
+
+    # HA core entity attributes:
+    entity_category = MLSwitchBase.EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        manager: "MerossDeviceBase",
+        channel: object,
+        entitykey: str | None = None,
+        **kwargs: "typing.Unpack[me.MerossEntityArgs]",
+    ):
+        super().__init__(
+            manager,
+            channel,
+            entitykey,
+            MLSwitchBase.DeviceClass.SWITCH,
+            device_value=0,
+            **kwargs,
         )
 
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        with self.exception_warning("restoring previous state"):
+            if last_state := await self.get_last_state_available():
+                self.is_on = last_state.state == self.hac.STATE_ON
 
-class ToggleXMixin(MerossDevice if typing.TYPE_CHECKING else object):
-    def __init__(self, descriptor: MerossDeviceDescriptor, entry):
-        super().__init__(descriptor, entry)
-        # we build switches here after everything else have been
-        # setup since the togglex verb might refer to a more specialized
-        # entity than switches
-        togglex = descriptor.digest.get(mc.KEY_TOGGLEX)
-        if isinstance(togglex, list):
-            for t in togglex:
-                channel = t.get(mc.KEY_CHANNEL)
-                if channel not in self.entities:
-                    MLSwitch.build_for_device(self, channel, mc.NS_APPLIANCE_CONTROL_TOGGLEX)
-        elif isinstance(togglex, dict):
-            channel = togglex.get(mc.KEY_CHANNEL)
-            if channel not in self.entities:
-                MLSwitch.build_for_device(self, channel, mc.NS_APPLIANCE_CONTROL_TOGGLEX)
-        # This is an euristhic for legacy firmwares or
-        # so when we cannot init any entity from system.all.digest
-        # we then guess we should have at least a switch
-        # edit: I guess ToggleX firmwares and on already support
-        # system.all.digest status broadcast
-        if not self.entities:
-            MLSwitch.build_for_device(self, 0, mc.NS_APPLIANCE_CONTROL_TOGGLEX)
+    async def async_turn_on(self, **kwargs):
+        self.update_onoff(1)
 
-    def _handle_Appliance_Control_ToggleX(self, header: dict, payload: dict):
-        self._parse__generic(mc.KEY_TOGGLEX, payload.get(mc.KEY_TOGGLEX))
-
-    def _parse_togglex(self, payload: dict):
-        self._parse__generic(mc.KEY_TOGGLEX, payload)
+    async def async_turn_off(self, **kwargs):
+        self.update_onoff(0)
 
 
-class ToggleMixin(MerossDevice if typing.TYPE_CHECKING else object):
-    def __init__(self, descriptor: MerossDeviceDescriptor, entry):
-        super().__init__(descriptor, entry)
-        # older firmwares (MSS110 with 1.1.28) look like dont really have 'digest'
-        # but have 'control' and the toggle payload looks like not carrying 'channel'
-        p_control = descriptor.all.get(mc.KEY_CONTROL)
-        if p_control:
-            p_toggle = p_control.get(mc.KEY_TOGGLE)
-            if isinstance(p_toggle, dict):
-                MLSwitch.build_for_device(
-                    self,
-                    p_toggle.get(mc.KEY_CHANNEL, 0),
-                    mc.NS_APPLIANCE_CONTROL_TOGGLE,
-                )
+class MLSwitch(MLSwitchBase):
+    """
+    Generic HA switch: could either be a physical outlet or another binary setting
+    of the device (see various config switches)
+    Switches are sometimes hybrid and their message dispatching is not 'set in stone'
+    since the status updates are likely managed in higher level implementations or so.
+    This class needs to be mixed in with any of the me.MENoChannelMixin,
+    me.MEDictChannelMixin, MEListChannelMixin in order to actually define the
+    implementation of the protocol message payload for 'SET' commands
+    """
 
-        if not self.entities:
-            MLSwitch.build_for_device(self, 0, mc.NS_APPLIANCE_CONTROL_TOGGLE)
+    @abstractmethod
+    async def async_request_value(self, device_value):
+        raise NotImplementedError("'async_request_value' needs to be overriden")
 
-    def _handle_Appliance_Control_Toggle(self, header: dict, payload: dict):
-        self._parse_toggle(payload[mc.KEY_TOGGLE])
+    async def async_turn_on(self, **kwargs):
+        if await self.async_request_value(1):
+            self.update_onoff(1)
 
-    def _parse_toggle(self, payload):
-        """
-        toggle doesn't have channel (#172)
-        """
-        if isinstance(payload, dict):
-            entity: MLSwitch = self.entities[payload.get(mc.KEY_CHANNEL, 0)]  # type: ignore
-            entity._parse_toggle(payload)
+    async def async_turn_off(self, **kwargs):
+        if await self.async_request_value(0):
+            self.update_onoff(0)
+
+
+class PhysicalLockSwitch(me.MEListChannelMixin, MLSwitch):
+
+    ns = mn.Appliance_Control_PhysicalLock
+
+    # HA core entity attributes:
+    entity_category = MLSwitch.EntityCategory.CONFIG
+
+    def __init__(self, manager: "MerossDevice"):
+        # right now we expect only 1 entity on channel == 0 (whatever)
+        super().__init__(manager, 0, mc.KEY_LOCK, self.DeviceClass.SWITCH)
+        manager.register_parser_entity(self)
+
+
+class MLToggle(me.MENoChannelMixin, MLSwitch):
+
+    ns = mn.Appliance_Control_Toggle
+
+    def __init__(self, manager: "MerossDevice"):
+        # 2024-03-13: passing entitykey="0" instead of channel in order
+        # to mantain unique_id compatibility with installations but
+        # updating to new toggle entity model (where channel is None for this entity type)
+        super().__init__(manager, None, "0", MLSwitch.DeviceClass.OUTLET)
+        manager.register_parser_entity(self)
+
+
+def digest_init_toggle(device: "MerossDevice", digest: dict) -> "DigestInitReturnType":
+    """{"onoff": 0, "lmTime": 1645391086}"""
+    MLToggle(device)
+    handler = device.namespace_handlers[mn.Appliance_Control_Toggle.name]
+    return handler.parse_generic, (handler,)
+
+
+class MLToggleX(me.MEDictChannelMixin, MLSwitch):
+
+    ns = mn.Appliance_Control_ToggleX
+
+    def __init__(self, manager: "MerossDevice", channel: object):
+        super().__init__(manager, channel, None, MLSwitch.DeviceClass.OUTLET)
+        manager.register_parser_entity(self)
+
+
+def digest_init_togglex(
+    device: "MerossDevice", togglex_digest: list
+) -> "DigestInitReturnType":
+    """[{ "channel": 0, "onoff": 1 }]"""
+    # We don't initialize every switch/ToggleX here since the digest reported channels
+    # might be mapped to more specialized entities:
+    # this is true for lights (MLLight), garageDoor (MLGarage) and fan (MLFan) though
+    # and maybe some more others.
+    # In general, it is not very clear how and when these ToggleX entities are really needed
+    # so we have some euristics in place to fix 'this and that'.
+    # The general rule is to let the togglex namespace/channel be managed by the
+    # aforementioned specialized entity, while, if no channel match exists, create a disabled
+    # (by default) switch entity. When  switches are really switches (like mssXXX series) instead,
+    # we'll setup proper MLToggleX (this is detected by the fact no specialized entity exists in
+    # device definition)
+
+    channels = {digest[mc.KEY_CHANNEL] for digest in togglex_digest}
+
+    digest = device.descriptor.digest
+
+    for key_digest in (mc.KEY_FAN, mc.KEY_GARAGEDOOR, mc.KEY_LIGHT):
+        if key_digest in digest:
+            for digest_channel in extract_dict_payloads(digest[key_digest]):
+                channel = digest_channel.get(mc.KEY_CHANNEL)
+                if channel in channels:
+                    channels.remove(channel)
+
+    # the fan controller 'map100' doesn't expose a fan in digest but it has one at channel 0
+    if (mn.Appliance_Control_Fan.name in device.descriptor.ability) and (
+        mc.KEY_FAN not in digest
+    ):
+        if 0 in channels:
+            channels.remove(0)
+
+    for channel in channels:
+        MLToggleX(device, channel)
+
+    handler = device.get_handler(mn.Appliance_Control_ToggleX)
+    handler.register_entity_class(MLToggleX)
+    return handler.parse_list, (handler,)

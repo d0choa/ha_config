@@ -14,10 +14,7 @@ async def async_set_tennis_values(
 
     #    _LOGGER.debug("%s: async_set_tennis_values() 0: %s %s %s", sensor_name, sensor_name, grouping_index, competition_index)
 
-    if team_index == 0:
-        oppo_index = 1
-    else:
-        oppo_index = 0
+    oppo_index = 1 - team_index
         
     grouping = await async_get_value(event, "groupings", grouping_index)
     if grouping is None:
@@ -118,8 +115,9 @@ async def async_set_tennis_values(
         new_values["last_play"] = (
             new_values["last_play"]
             + str(
-                await async_get_value(
-                    competitor, "athlete", "shortName", default="{shortName}"
+                await async_get_value(competitor, "athlete", "shortName", 
+                        default=await async_get_value(competitor, "roster", "shortDisplayName", 
+                            default="{shortName}")
                 )
             )
             + " "
@@ -138,8 +136,9 @@ async def async_set_tennis_values(
         new_values["last_play"] = (
             new_values["last_play"]
             + str(
-                await async_get_value(
-                    opponent, "athlete", "shortName", default="{shortName}"
+                await async_get_value(opponent, "athlete", "shortName",
+                        default=await async_get_value(opponent, "roster", "shortDisplayName", 
+                            default="{shortName}")
                 )
             )
             + " "

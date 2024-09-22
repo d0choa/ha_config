@@ -1,37 +1,38 @@
 """Config flow for Pirate Weather."""
-import voluptuous as vol
+
 import logging
 from datetime import timedelta
 
 import aiohttp
-
+import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_MODE,
-    CONF_NAME,
     CONF_MONITORED_CONDITIONS,
+    CONF_NAME,
     CONF_SCAN_INTERVAL,
 )
 from homeassistant.core import callback
-import homeassistant.helpers.config_validation as cv
+from httpx import HTTPError
 
 from .const import (
+    ALL_CONDITIONS,
     CONF_LANGUAGE,
+    CONF_UNITS,
     CONFIG_FLOW_VERSION,
     DEFAULT_FORECAST_MODE,
     DEFAULT_LANGUAGE,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_UNITS,
     DOMAIN,
     LANGUAGES,
-    CONF_UNITS,
-    DEFAULT_UNITS,
-    ALL_CONDITIONS,
-    PW_PLATFORMS,
     PW_PLATFORM,
+    PW_PLATFORMS,
     PW_PREVPLATFORM,
     PW_ROUND,
 )
@@ -123,20 +124,22 @@ class PirateWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.warning(
                         "Pirate Weather Setup Error: Invalid API Key, Ensure that you've subscribed to API at https://pirate-weather.apiable.io/"
                     )
-                    errors[
-                        "base"
-                    ] = "Invalid API Key, Ensure that you've subscribed to API at https://pirate-weather.apiable.io/"
+                    errors["base"] = (
+                        "Invalid API Key, Ensure that you've subscribed to API at https://pirate-weather.apiable.io/"
+                    )
 
-            except Exception:
-                _LOGGER.warning("Pirate Weather Setup Error: HTTP Error: " + api_status)
-                errors["base"] = "API Error: " + api_status
+            except HTTPError:
+                _LOGGER.warning(
+                    "Pirate Weather Setup Error: API HTTP Error: %s", api_status
+                )
+                errors["base"] = "API Error: %s", api_status
 
-            if not errors:
+            if errors:
+                _LOGGER.warning(errors)
+            else:
                 return self.async_create_entry(
                     title=user_input[CONF_NAME], data=user_input
                 )
-            else:
-                _LOGGER.warning(errors)
 
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
@@ -223,6 +226,15 @@ class PirateWeatherOptionsFlow(config_entries.OptionsFlow):
                             ),
                         ),
                     ): cv.longitude,
+                    vol.Optional(
+                        CONF_SCAN_INTERVAL,
+                        default=self.config_entry.options.get(
+                            CONF_SCAN_INTERVAL,
+                            self.config_entry.data.get(
+                                CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                            ),
+                        ),
+                    ): int,
                     vol.Required(
                         PW_PLATFORM,
                         default=self.config_entry.options.get(
@@ -291,9 +303,8 @@ async def _is_pw_api_online(hass, api_key, lat, lon):
         + str(lon)
     )
 
-    async with aiohttp.ClientSession(raise_for_status=False) as session, session.get(
-        forecastString
-    ) as resp:
-        status = resp.status
-
-    return status
+    async with (
+        aiohttp.ClientSession(raise_for_status=False) as session,
+        session.get(forecastString) as resp,
+    ):
+        return resp.status

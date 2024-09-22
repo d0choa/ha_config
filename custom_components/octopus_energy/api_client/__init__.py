@@ -5,14 +5,16 @@ from asyncio import TimeoutError
 from datetime import (datetime, timedelta, time)
 from threading import RLock
 
-from homeassistant.util.dt import (as_utc, now, as_local, parse_datetime)
+from homeassistant.util.dt import (as_utc, now, as_local, parse_datetime, parse_date)
 
 from ..const import INTEGRATION_VERSION
 
 from ..utils import (
-  get_tariff_parts,
+  is_day_night_tariff,
 )
 
+from .intelligent_device import IntelligentDevice
+from .octoplus import RedeemOctoplusPointsResponse
 from .intelligent_settings import IntelligentSettings
 from .intelligent_dispatches import IntelligentDispatchItem, IntelligentDispatches
 from .saving_sessions import JoinSavingSessionResponse, SavingSession, SavingSessionsResponse
@@ -36,6 +38,8 @@ account_query = '''query {{
 			meterPoint {{
 				mpan
 				meters(includeInactive: false) {{
+          activeFrom
+          activeTo
           makeAndType
 					serialNumber
           makeAndType
@@ -56,28 +60,12 @@ account_query = '''query {{
 				agreements(includeInactive: true) {{
 					validFrom
 					validTo
-					tariff {{
-						...on StandardTariff {{
-							tariffCode
+          tariff {{
+            ... on TariffType {{
               productCode
-						}}
-						...on DayNightTariff {{
-							tariffCode
-              productCode
-						}}
-						...on ThreeRateTariff {{
-							tariffCode
-              productCode
-						}}
-						...on HalfHourlyTariff {{
-							tariffCode
-              productCode
-						}}
-            ...on PrepayTariff {{
-							tariffCode
-              productCode
-						}}
-					}}
+              tariffCode
+            }}
+          }}
 				}}
 			}}
     }}
@@ -85,6 +73,8 @@ account_query = '''query {{
 			meterPoint {{
 				mprn
 				meters(includeInactive: false) {{
+          activeFrom
+          activeTo
 					serialNumber
           consumptionUnits
           modelName
@@ -117,6 +107,7 @@ live_consumption_query = '''query {{
 		end: "{period_to}"
 	) {{
     readAt
+    consumption
 		consumptionDelta
     demand
 	}}
@@ -301,6 +292,16 @@ greenness_forecast_query = '''query {
   }
 }'''
 
+redeem_octoplus_points_account_credit_mutation = '''mutation {{
+  redeemLoyaltyPointsForAccountCredit(input: {{
+    accountNumber: "{account_id}",
+    points: {points}
+  }}) {{
+    pointsRedeemed
+  }}
+}}
+'''
+
 user_agent_value = "bottlecapdave-home-assistant-octopus-energy"
 
 def get_valid_from(rate):
@@ -309,7 +310,7 @@ def get_valid_from(rate):
 def get_start(rate):
   return rate["start"]
     
-def rates_to_thirty_minute_increments(data, period_from: datetime, period_to: datetime, tariff_code: str, price_cap: float = None):
+def rates_to_thirty_minute_increments(data, period_from: datetime, period_to: datetime, tariff_code: str, price_cap: float = None, favour_direct_debit_rates = True):
   """Process the collection of rates to ensure they're in 30 minute periods"""
   starting_period_from = period_from
   results = []
@@ -320,6 +321,15 @@ def rates_to_thirty_minute_increments(data, period_from: datetime, period_to: da
     # We need to normalise our data into 30 minute increments so that all of our rates across all tariffs are the same and it's 
     # easier to calculate our target rate sensors
     for item in items:
+
+      if ("payment_method" in item and
+          item["payment_method"] is not None and
+          (
+            (item["payment_method"].lower() == "direct_debit" and favour_direct_debit_rates != True) or
+            (item["payment_method"].lower() != "direct_debit" and favour_direct_debit_rates != False)
+          )):
+        continue
+
       value_inc_vat = float(item["value_inc_vat"])
 
       is_capped = False
@@ -375,11 +385,13 @@ class RequestException(ApiException):
     super().__init__(message)
     self.errors = errors
 
+class AuthenticationException(RequestException): ...
+
 class OctopusEnergyApiClient:
   _refresh_token_lock = RLock()
   _session_lock = RLock()
 
-  def __init__(self, api_key, electricity_price_cap = None, gas_price_cap = None, timeout_in_seconds = 20):
+  def __init__(self, api_key, electricity_price_cap = None, gas_price_cap = None, timeout_in_seconds = 20, favour_direct_debit_rates = True):
     if (api_key is None):
       raise Exception('API KEY is not set')
 
@@ -393,6 +405,7 @@ class OctopusEnergyApiClient:
 
     self._electricity_price_cap = electricity_price_cap
     self._gas_price_cap = gas_price_cap
+    self._favour_direct_debit_rates = favour_direct_debit_rates
 
     self._timeout = aiohttp.ClientTimeout(total=None, sock_connect=timeout_in_seconds, sock_read=timeout_in_seconds)
     self._default_headers = { "user-agent": f'{user_agent_value}/{INTEGRATION_VERSION}' }
@@ -401,7 +414,8 @@ class OctopusEnergyApiClient:
 
   async def async_close(self):
     with self._session_lock:
-      await self._session.close()
+      if self._session is not None:
+        await self._session.close()
 
   def _create_client_session(self):
     if self._session is not None:
@@ -440,10 +454,103 @@ class OctopusEnergyApiClient:
       except TimeoutError:
         _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
         raise TimeoutException()
+      
+  def map_electricity_meters(self, meter_point):
+    meters = list(
+      map(lambda m: {
+        "active_from": parse_date(m["activeFrom"]) if m["activeFrom"] is not None else None,
+        "active_to": parse_date(m["activeTo"]) if m["activeTo"] is not None else None,
+        "serial_number": m["serialNumber"],
+        "is_export": m["smartExportElectricityMeter"] is not None,
+        "is_smart_meter": f'{m["meterType"]}'.startswith("S1") or f'{m["meterType"]}'.startswith("S2"),
+        "device_id": m["smartImportElectricityMeter"]["deviceId"] if m["smartImportElectricityMeter"] is not None else None,
+        "manufacturer": m["smartImportElectricityMeter"]["manufacturer"] 
+          if m["smartImportElectricityMeter"] is not None 
+          else m["smartExportElectricityMeter"]["manufacturer"] 
+          if m["smartExportElectricityMeter"] is not None
+          else m["makeAndType"],
+        "model": m["smartImportElectricityMeter"]["model"] 
+          if m["smartImportElectricityMeter"] is not None 
+          else m["smartExportElectricityMeter"]["model"] 
+          if m["smartExportElectricityMeter"] is not None
+          else None,
+        "firmware": m["smartImportElectricityMeter"]["firmwareVersion"] 
+          if m["smartImportElectricityMeter"] is not None 
+          else m["smartExportElectricityMeter"]["firmwareVersion"] 
+          if m["smartExportElectricityMeter"] is not None
+          else None
+        },
+        meter_point["meterPoint"]["meters"]
+        if "meterPoint" in meter_point and "meters" in meter_point["meterPoint"] and meter_point["meterPoint"]["meters"] is not None
+        else []
+      )
+    )
+
+    meters.sort(key=lambda meter: meter["active_from"], reverse=True)
+
+    return {
+      "mpan": meter_point["meterPoint"]["mpan"],
+      "meters": meters,
+      "agreements": list(map(lambda a: {
+        "start": a["validFrom"],
+        "end": a["validTo"],
+        "tariff_code": a["tariff"]["tariffCode"] if "tariff" in a and "tariffCode" in a["tariff"] else None,
+        "product_code": a["tariff"]["productCode"] if "tariff" in a and "productCode" in a["tariff"] else None,
+      }, 
+      meter_point["meterPoint"]["agreements"]
+      if "meterPoint" in meter_point and "agreements" in meter_point["meterPoint"] and meter_point["meterPoint"]["agreements"] is not None
+      else []
+    ))
+  }
+
+  def map_gas_meters(self, meter_point):
+    meters = list(
+      map(lambda m: {
+        "active_from": parse_date(m["activeFrom"]) if m["activeFrom"] is not None else None,
+        "active_to": parse_date(m["activeTo"]) if m["activeTo"] is not None else None,
+        "serial_number": m["serialNumber"],
+        "consumption_units": m["consumptionUnits"],
+        "is_smart_meter": m["mechanism"] == "S1" or m["mechanism"] == "S2",
+        "device_id": m["smartGasMeter"]["deviceId"] if m["smartGasMeter"] is not None else None,
+        "manufacturer": m["smartGasMeter"]["manufacturer"] 
+          if m["smartGasMeter"] is not None 
+          else m["modelName"],
+        "model": m["smartGasMeter"]["model"] 
+          if m["smartGasMeter"] is not None 
+          else None,
+        "firmware": m["smartGasMeter"]["firmwareVersion"] 
+          if m["smartGasMeter"] is not None 
+          else None
+      },
+      meter_point["meterPoint"]["meters"]
+      if "meterPoint" in meter_point and "meters" in meter_point["meterPoint"] and meter_point["meterPoint"]["meters"] is not None
+      else []
+      )
+    )
+
+    meters.sort(key=lambda meter: meter["active_from"], reverse=True)
+
+    return {
+      "mprn": meter_point["meterPoint"]["mprn"],
+      "meters": meters,
+      "agreements": list(map(lambda a: {
+          "start": a["validFrom"],
+          "end": a["validTo"],
+          "tariff_code": a["tariff"]["tariffCode"] if "tariff" in a and "tariffCode" in a["tariff"] else None,
+          "product_code": a["tariff"]["productCode"] if "tariff" in a and "productCode" in a["tariff"] else None,
+        },
+        meter_point["meterPoint"]["agreements"]
+        if "meterPoint" in meter_point and "agreements" in meter_point["meterPoint"] and meter_point["meterPoint"]["agreements"] is not None
+        else []
+      ))
+    }
     
   async def async_get_account(self, account_id):
     """Get the user's account"""
     await self.async_refresh_token()
+
+    local_now: datetime = now()
+    local_date = local_now.date()
 
     try:
       client = self._create_client_session()
@@ -465,85 +572,17 @@ class OctopusEnergyApiClient:
             "octoplus_enrolled": account_response_body["data"]["octoplusAccountInfo"]["isOctoplusEnrolled"] == True 
             if "octoplusAccountInfo" in account_response_body["data"] and "isOctoplusEnrolled" in account_response_body["data"]["octoplusAccountInfo"]
             else False,
-            "electricity_meter_points": list(map(lambda mp: {
-                "mpan": mp["meterPoint"]["mpan"],
-                "meters": list(map(lambda m: {
-                    "serial_number": m["serialNumber"],
-                    "is_export": m["smartExportElectricityMeter"] is not None,
-                    "is_smart_meter": f'{m["meterType"]}'.startswith("S1") or f'{m["meterType"]}'.startswith("S2"),
-                    "device_id": m["smartImportElectricityMeter"]["deviceId"] if m["smartImportElectricityMeter"] is not None else None,
-                    "manufacturer": m["smartImportElectricityMeter"]["manufacturer"] 
-                      if m["smartImportElectricityMeter"] is not None 
-                      else m["smartExportElectricityMeter"]["manufacturer"] 
-                      if m["smartExportElectricityMeter"] is not None
-                      else m["makeAndType"],
-                    "model": m["smartImportElectricityMeter"]["model"] 
-                      if m["smartImportElectricityMeter"] is not None 
-                      else m["smartExportElectricityMeter"]["model"] 
-                      if m["smartExportElectricityMeter"] is not None
-                      else None,
-                    "firmware": m["smartImportElectricityMeter"]["firmwareVersion"] 
-                      if m["smartImportElectricityMeter"] is not None 
-                      else m["smartExportElectricityMeter"]["firmwareVersion"] 
-                      if m["smartExportElectricityMeter"] is not None
-                      else None
-                  },
-                  mp["meterPoint"]["meters"]
-                  if "meterPoint" in mp and "meters" in mp["meterPoint"] and mp["meterPoint"]["meters"] is not None
-                  else []
-                )),
-                "agreements": list(map(lambda a: {
-                  "start": a["validFrom"],
-                  "end": a["validTo"],
-                  "tariff_code": a["tariff"]["tariffCode"] if "tariff" in a and "tariffCode" in a["tariff"] else None,
-                  "product_code": a["tariff"]["productCode"] if "tariff" in a and "productCode" in a["tariff"] else None,
-                }, 
-                mp["meterPoint"]["agreements"]
-                if "meterPoint" in mp and "agreements" in mp["meterPoint"] and mp["meterPoint"]["agreements"] is not None
-                else []
-              ))
-            }, 
-            account_response_body["data"]["account"]["electricityAgreements"]
-            if "electricityAgreements" in account_response_body["data"]["account"] and account_response_body["data"]["account"]["electricityAgreements"] is not None
-            else []
-          )),
-            "gas_meter_points": list(map(lambda mp: {
-              "mprn": mp["meterPoint"]["mprn"],
-              "meters": list(map(lambda m: {
-                  "serial_number": m["serialNumber"],
-                  "consumption_units": m["consumptionUnits"],
-                  "is_smart_meter": m["mechanism"] == "S1" or m["mechanism"] == "S2",
-                  "device_id": m["smartGasMeter"]["deviceId"] if m["smartGasMeter"] is not None else None,
-                  "manufacturer": m["smartGasMeter"]["manufacturer"] 
-                    if m["smartGasMeter"] is not None 
-                    else m["modelName"],
-                  "model": m["smartGasMeter"]["model"] 
-                    if m["smartGasMeter"] is not None 
-                    else None,
-                  "firmware": m["smartGasMeter"]["firmwareVersion"] 
-                    if m["smartGasMeter"] is not None 
-                    else None
-                },
-                mp["meterPoint"]["meters"]
-                if "meterPoint" in mp and "meters" in mp["meterPoint"] and mp["meterPoint"]["meters"] is not None
-                else []
-              )),
-              "agreements": list(map(lambda a: {
-                  "start": a["validFrom"],
-                  "end": a["validTo"],
-                  "tariff_code": a["tariff"]["tariffCode"] if "tariff" in a and "tariffCode" in a["tariff"] else None,
-                  "product_code": a["tariff"]["productCode"] if "tariff" in a and "productCode" in a["tariff"] else None,
-                },
-                mp["meterPoint"]["agreements"]
-                if "meterPoint" in mp and "agreements" in mp["meterPoint"] and mp["meterPoint"]["agreements"] is not None
-                else []
-              ))
-            }, 
-            account_response_body["data"]["account"]["gasAgreements"] 
-            if "gasAgreements" in account_response_body["data"]["account"] and account_response_body["data"]["account"]["gasAgreements"] is not None
-            else []
-          )),
-        }
+            "electricity_meter_points": list(map(self.map_electricity_meters, 
+              account_response_body["data"]["account"]["electricityAgreements"]
+              if "electricityAgreements" in account_response_body["data"]["account"] and account_response_body["data"]["account"]["electricityAgreements"] is not None
+              else []
+            )),
+            "gas_meter_points": list(map(self.map_gas_meters,
+              account_response_body["data"]["account"]["gasAgreements"] 
+              if "gasAgreements" in account_response_body["data"]["account"] and account_response_body["data"]["account"]["gasAgreements"] is not None
+              else []
+            )),
+          }
         else:
           _LOGGER.error("Failed to retrieve account")
     
@@ -638,7 +677,7 @@ class OctopusEnergyApiClient:
     return None
   
   async def async_join_octoplus_saving_session(self, account_id: str, event_code: str) -> JoinSavingSessionResponse:
-    """Get the user's octoplus points"""
+    """Join a saving session"""
     await self.async_refresh_token()
 
     try:
@@ -647,13 +686,33 @@ class OctopusEnergyApiClient:
       # Get account response
       payload = { "query": octoplus_saving_session_join_mutation.format(account_id=account_id, event_code=event_code) }
       headers = { "Authorization": f"JWT {self._graphql_token}" }
-      async with client.post(url, json=payload, headers=headers) as account_response:
+      async with client.post(url, json=payload, headers=headers) as join_response:
 
         try:
-          await self.__async_read_response__(account_response, url)
+          await self.__async_read_response__(join_response, url)
           return JoinSavingSessionResponse(True, [])
         except RequestException as e:
           return JoinSavingSessionResponse(False, e.errors)
+    
+    except TimeoutError:
+      _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
+      raise TimeoutException()
+    
+  async def async_redeem_octoplus_points_into_account_credit(self, account_id: str, points_to_redeem: int) -> RedeemOctoplusPointsResponse:
+    """Redeem octoplus points"""
+    await self.async_refresh_token()
+
+    try:
+      client = self._create_client_session()
+      url = f'{self._base_url}/v1/graphql/'
+      payload = { "query": redeem_octoplus_points_account_credit_mutation.format(account_id=account_id, points=points_to_redeem) }
+      headers = { "Authorization": f"JWT {self._graphql_token}" }
+      async with client.post(url, json=payload, headers=headers) as redemption_response:
+        try:
+          await self.__async_read_response__(redemption_response, url)
+          return RedeemOctoplusPointsResponse(True, [])
+        except RequestException as e:
+          return RedeemOctoplusPointsResponse(False, e.errors)
     
     except TimeoutError:
       _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
@@ -674,7 +733,8 @@ class OctopusEnergyApiClient:
 
         if (response_body is not None and "data" in response_body and "smartMeterTelemetry" in response_body["data"] and response_body["data"]["smartMeterTelemetry"] is not None and len(response_body["data"]["smartMeterTelemetry"]) > 0):
           return list(map(lambda mp: {
-            "consumption": float(mp["consumptionDelta"]) / 1000,
+            "total_consumption": float(mp["consumption"]) / 1000 if "consumption" in mp and mp["consumption"] is not None else None,
+            "consumption": float(mp["consumptionDelta"]) / 1000 if "consumptionDelta" in mp and mp["consumptionDelta"] is not None else 0,
             "demand": float(mp["demand"]) if "demand" in mp and mp["demand"] is not None else None,
             "start": parse_datetime(mp["readAt"]),
             "end": parse_datetime(mp["readAt"]) + timedelta(minutes=30)
@@ -704,7 +764,7 @@ class OctopusEnergyApiClient:
           if data is None:
             return None
           else:
-            results = results + rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._electricity_price_cap)
+            results = results + rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._electricity_price_cap, self._favour_direct_debit_rates)
             has_more_rates = "next" in data and data["next"] is not None
             if has_more_rates:
               page = page + 1
@@ -730,9 +790,9 @@ class OctopusEnergyApiClient:
           return None
         else:
           # Normalise the rates to be in 30 minute increments and remove any rates that fall outside of our day period 
-          day_rates = rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._electricity_price_cap)
+          day_rates = rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._electricity_price_cap, self._favour_direct_debit_rates)
           for rate in day_rates:
-            if (self.__is_night_rate(rate, is_smart_meter)) == False:
+            if self.__is_night_rate(rate, is_smart_meter) == False:
               results.append(rate)
 
       url = f'{self._base_url}/v1/products/{product_code}/electricity-tariffs/{tariff_code}/night-unit-rates?period_from={period_from.strftime("%Y-%m-%dT%H:%M:%SZ")}&period_to={period_to.strftime("%Y-%m-%dT%H:%M:%SZ")}'
@@ -742,9 +802,9 @@ class OctopusEnergyApiClient:
           return None
 
         # Normalise the rates to be in 30 minute increments and remove any rates that fall outside of our night period 
-        night_rates = rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._electricity_price_cap)
+        night_rates = rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._electricity_price_cap, self._favour_direct_debit_rates)
         for rate in night_rates:
-          if (self.__is_night_rate(rate, is_smart_meter)) == True:
+          if self.__is_night_rate(rate, is_smart_meter) == True:
             results.append(rate)
     except TimeoutError:
       _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
@@ -755,27 +815,34 @@ class OctopusEnergyApiClient:
 
     return results
 
-  async def async_get_electricity_rates(self, tariff_code: str, is_smart_meter: bool, period_from: datetime, period_to: datetime):
+  async def async_get_electricity_rates(self, product_code: str, tariff_code: str, is_smart_meter: bool, period_from: datetime, period_to: datetime):
     """Get the current rates"""
 
-    tariff_parts = get_tariff_parts(tariff_code)
-    if tariff_parts is None:
-      return None
-    
-    product_code = tariff_parts.product_code
-
-    if (tariff_parts.rate.startswith("1")):
-      return await self.async_get_electricity_standard_rates(product_code, tariff_code, period_from, period_to)
-    else:
+    if is_day_night_tariff(tariff_code):
       return await self.async_get_electricity_day_night_rates(product_code, tariff_code, is_smart_meter, period_from, period_to)
-
-  async def async_get_electricity_consumption(self, mpan, serial_number, period_from, period_to):
+    else:
+      return await self.async_get_electricity_standard_rates(product_code, tariff_code, period_from, period_to)
+      
+  async def async_get_electricity_consumption(self, mpan, serial_number, period_from, period_to, page_size: int | None = None):
     """Get the current electricity consumption"""
 
     try:
       client = self._create_client_session()
       auth = aiohttp.BasicAuth(self._api_key, '')
-      url = f'{self._base_url}/v1/electricity-meter-points/{mpan}/meters/{serial_number}/consumption?period_from={period_from.strftime("%Y-%m-%dT%H:%M:%SZ")}&period_to={period_to.strftime("%Y-%m-%dT%H:%M:%SZ")}'
+
+      query_params = []
+      if period_from is not None:
+        query_params.append(f'period_from={period_from.strftime("%Y-%m-%dT%H:%M:%SZ")}')
+      
+      if period_to is not None:
+        query_params.append(f'period_to={period_to.strftime("%Y-%m-%dT%H:%M:%SZ")}')
+
+      if page_size is not None:
+        query_params.append(f'page_size={page_size}')
+
+      query_string = '&'.join(query_params)
+      
+      url = f"{self._base_url}/v1/electricity-meter-points/{mpan}/meters/{serial_number}/consumption{f'?{query_string}' if len(query_string) > 0 else ''}"
       async with client.get(url, auth=auth) as response:
         
         data = await self.__async_read_response__(response, url)
@@ -787,7 +854,7 @@ class OctopusEnergyApiClient:
 
             # For some reason, the end point returns slightly more data than we requested, so we need to filter out
             # the results
-            if as_utc(item["start"]) >= period_from and as_utc(item["end"]) <= period_to:
+            if (period_from is None or as_utc(item["start"]) >= period_from) and (period_to is None or as_utc(item["end"]) <= period_to):
               results.append(item)
           
           results.sort(key=self.__get_interval_end)
@@ -799,14 +866,8 @@ class OctopusEnergyApiClient:
       _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
       raise TimeoutException()
 
-  async def async_get_gas_rates(self, tariff_code, period_from, period_to):
+  async def async_get_gas_rates(self, product_code: str, tariff_code: str, period_from, period_to):
     """Get the gas rates"""
-    tariff_parts = get_tariff_parts(tariff_code)
-    if tariff_parts is None:
-      return None
-    
-    product_code = tariff_parts.product_code
-
     results = []
 
     try:
@@ -818,7 +879,7 @@ class OctopusEnergyApiClient:
         if data is None:
           return None
         else:
-          results = rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._gas_price_cap)
+          results = rates_to_thirty_minute_increments(data, period_from, period_to, tariff_code, self._gas_price_cap, self._favour_direct_debit_rates)
 
       return results
     
@@ -826,13 +887,26 @@ class OctopusEnergyApiClient:
       _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
       raise TimeoutException()
 
-  async def async_get_gas_consumption(self, mprn, serial_number, period_from, period_to):
+  async def async_get_gas_consumption(self, mprn, serial_number, period_from, period_to, page_size: int | None = None):
     """Get the current gas rates"""
     
     try:
       client = self._create_client_session()
       auth = aiohttp.BasicAuth(self._api_key, '')
-      url = f'{self._base_url}/v1/gas-meter-points/{mprn}/meters/{serial_number}/consumption?period_from={period_from.strftime("%Y-%m-%dT%H:%M:%SZ")}&period_to={period_to.strftime("%Y-%m-%dT%H:%M:%SZ")}'
+
+      query_params = []
+      if period_from is not None:
+        query_params.append(f'period_from={period_from.strftime("%Y-%m-%dT%H:%M:%SZ")}')
+      
+      if period_to is not None:
+        query_params.append(f'period_to={period_to.strftime("%Y-%m-%dT%H:%M:%SZ")}')
+
+      if page_size is not None:
+        query_params.append(f'page_size={page_size}')
+
+      query_string = '&'.join(query_params)
+
+      url = f"{self._base_url}/v1/gas-meter-points/{mprn}/meters/{serial_number}/consumption{f'?{query_string}' if len(query_string) > 0 else ''}"
       async with client.get(url, auth=auth) as response:
         data = await self.__async_read_response__(response, url)
         if (data is not None and "results" in data):
@@ -843,7 +917,7 @@ class OctopusEnergyApiClient:
 
             # For some reason, the end point returns slightly more data than we requested, so we need to filter out
             # the results
-            if as_utc(item["start"]) >= period_from and as_utc(item["end"]) <= period_to:
+            if (period_from is None or as_utc(item["start"]) >= period_from) and (period_to is None or as_utc(item["end"]) <= period_to):
               results.append(item)
           
           results.sort(key=self.__get_interval_end)
@@ -867,14 +941,8 @@ class OctopusEnergyApiClient:
       _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
       raise TimeoutException()
 
-  async def async_get_electricity_standing_charge(self, tariff_code, period_from, period_to):
+  async def async_get_electricity_standing_charge(self, product_code, tariff_code, period_from, period_to):
     """Get the electricity standing charges"""
-    tariff_parts = get_tariff_parts(tariff_code)
-    if tariff_parts is None:
-      return None
-    
-    product_code = tariff_parts.product_code
-    
     result = None
 
     try:
@@ -895,14 +963,8 @@ class OctopusEnergyApiClient:
         _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
         raise TimeoutException()
 
-  async def async_get_gas_standing_charge(self, tariff_code, period_from, period_to):
+  async def async_get_gas_standing_charge(self, product_code, tariff_code, period_from, period_to):
     """Get the gas standing charges"""
-    tariff_parts = get_tariff_parts(tariff_code)
-    if tariff_parts is None:
-      return None
-    
-    product_code = tariff_parts.product_code
-
     result = None
 
     try:
@@ -1161,7 +1223,7 @@ class OctopusEnergyApiClient:
       _LOGGER.warning(f'Failed to connect. Timeout of {self._timeout} exceeded.')
       raise TimeoutException()
   
-  async def async_get_intelligent_device(self, account_id: str):
+  async def async_get_intelligent_device(self, account_id: str) -> IntelligentDevice:
     """Get the user's intelligent dispatches"""
     await self.async_refresh_token()
 
@@ -1177,17 +1239,19 @@ class OctopusEnergyApiClient:
         if (response_body is not None and "data" in response_body and
             "registeredKrakenflexDevice" in response_body["data"]):
           device = response_body["data"]["registeredKrakenflexDevice"]
-          return {
-            "krakenflexDeviceId": device["krakenflexDeviceId"],
-            "provider": device["provider"],
-            "vehicleMake": device["vehicleMake"],
-            "vehicleModel": device["vehicleModel"],
-            "vehicleBatterySizeInKwh": float(device["vehicleBatterySizeInKwh"]) if "vehicleBatterySizeInKwh" in device and device["vehicleBatterySizeInKwh"] is not None else None,
-            "chargePointMake": device["chargePointMake"],
-            "chargePointModel": device["chargePointModel"],
-            "chargePointPowerInKw": float(device["chargePointPowerInKw"]) if "chargePointPowerInKw" in device and device["chargePointPowerInKw"] is not None else None,
-            
-          }
+          if device["krakenflexDeviceId"] is not None:
+            return IntelligentDevice(
+              device["krakenflexDeviceId"],
+              device["provider"],
+              device["vehicleMake"],
+              device["vehicleModel"],
+              float(device["vehicleBatterySizeInKwh"]) if "vehicleBatterySizeInKwh" in device and device["vehicleBatterySizeInKwh"] is not None else None,
+              device["chargePointMake"],
+              device["chargePointModel"],
+              float(device["chargePointPowerInKw"]) if "chargePointPowerInKw" in device and device["chargePointPowerInKw"] is not None else None
+            )
+          else:
+            _LOGGER.debug('Skipping intelligent device as id is not available')
         else:
           _LOGGER.error("Failed to retrieve intelligent device")
       
@@ -1306,7 +1370,11 @@ class OctopusEnergyApiClient:
         msg = f'DO NOT REPORT - Octopus Energy server error ({url}): {response.status}; {text}'
         _LOGGER.warning(msg)
         raise ServerException(msg)
-      elif response.status not in [401, 403, 404]:
+      elif response.status in [401, 403]:
+        msg = f'Failed to send request ({url}): {response.status}; {text}'
+        _LOGGER.warning(msg)
+        raise AuthenticationException(msg, [])
+      elif response.status not in [404]:
         msg = f'Failed to send request ({url}): {response.status}; {text}'
         _LOGGER.warning(msg)
         raise RequestException(msg, [])
@@ -1324,6 +1392,11 @@ class OctopusEnergyApiClient:
       msg = f'Errors in request ({url}): {data_as_json["errors"]}'
       errors = list(map(lambda error: error["message"], data_as_json["errors"]))
       _LOGGER.warning(msg)
+
+      for error in data_as_json["errors"]:
+        if (error["extensions"]["errorCode"] in ("KT-CT-1139", "KT-CT-1111", "KT-CT-1143")):
+          raise AuthenticationException(msg, errors)
+
       raise RequestException(msg, errors)
     
     return data_as_json

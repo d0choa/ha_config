@@ -1,59 +1,40 @@
-from __future__ import annotations
-import json
-
 import typing
 
 from ..calendar import MtsSchedule
-from ..climate import MtsClimate, MtsSetPointNumber
-from ..helpers import reverse_lookup
-from ..merossclient import const as mc
-from ..number import MLConfigNumber
+from ..climate import MtsClimate
+from ..merossclient import const as mc, namespaces as mn
+from ..number import MtsSetPointNumber, MtsTemperatureNumber
+from ..switch import MLConfigSwitch
 
 if typing.TYPE_CHECKING:
-    from ..meross_device_hub import MTS100SubDevice
+    from ..binary_sensor import MLBinarySensor
+    from .hub import MTS100SubDevice
 
 
-class Mts100AdjustNumber(MLConfigNumber):
-    namespace = mc.NS_APPLIANCE_HUB_MTS100_ADJUST
-    key_namespace = mc.KEY_ADJUST
-    key_channel = mc.KEY_ID
+class Mts100AdjustNumber(MtsTemperatureNumber):
+
+    ns = mn.Appliance_Hub_Mts100_Adjust
     key_value = mc.KEY_TEMPERATURE
 
-    __slots__ = ("climate",)
+    # HA core entity attributes:
+    native_max_value = 5
+    native_min_value = -5
+    native_step = 0.5
 
-    def __init__(self, manager: MTS100SubDevice, climate: Mts100Climate):
-        self.climate = climate  # climate not initialized yet
-        self._attr_name = "Adjust temperature"
+    def __init__(self, climate: "Mts100Climate"):
         super().__init__(
-            manager,
-            manager.id,
-            f"config_{self.key_namespace}_{self.key_value}",
-            MLConfigNumber.DeviceClass.TEMPERATURE,
+            climate,
+            f"config_{self.ns.key}_{self.key_value}",
+            name="Adjust temperature",
         )
-
-    @property
-    def native_max_value(self):
-        return 5
-
-    @property
-    def native_min_value(self):
-        return -5
-
-    @property
-    def native_step(self):
-        return 0.5
-
-    @property
-    def native_unit_of_measurement(self):
-        return MtsClimate.TEMP_CELSIUS
-
-    @property
-    def device_scale(self):
-        return 100
+        # override the default climate.device_scale set in base cls
+        self.device_scale = 100
 
 
 class Mts100Climate(MtsClimate):
     """Climate entity for hub paired devices MTS100, MTS100V3, MTS150"""
+
+    ns = mn.Appliance_Hub_Mts100_Temperature
 
     MTS_MODE_TO_PRESET_MAP = {
         mc.MTS100_MODE_CUSTOM: MtsClimate.PRESET_CUSTOM,
@@ -67,77 +48,114 @@ class Mts100Climate(MtsClimate):
     # if mts100 is in any of 'off', 'auto' we just set the 'custom'
     # target temp but of course the valve will not follow
     # this temp since it's mode is not set to follow a manual set
-    PRESET_TO_TEMPERATUREKEY_MAP = {
-        MtsClimate.PRESET_CUSTOM: mc.KEY_CUSTOM,
-        MtsClimate.PRESET_COMFORT: mc.KEY_COMFORT,
-        MtsClimate.PRESET_SLEEP: mc.KEY_ECONOMY,
-        MtsClimate.PRESET_AWAY: mc.KEY_AWAY,
-        MtsClimate.PRESET_AUTO: mc.KEY_CUSTOM,
-    }
+    MTS_MODE_TO_TEMPERATUREKEY_MAP = mc.MTS100_MODE_TO_CURRENTSET_MAP
 
-    manager: MTS100SubDevice
+    manager: "MTS100SubDevice"
 
-    def __init__(self, manager: MTS100SubDevice):
-        self._attr_extra_state_attributes = {}
+    # HA core entity attributes:
+    _unrecorded_attributes = frozenset(
+        {
+            mc.KEY_SCHEDULEBMODE,
+            *MtsClimate._unrecorded_attributes,
+        }
+    )
+
+    __slots__ = (
+        "binary_sensor_window",
+        "switch_patch_hvacaction",
+    )
+
+    def __init__(self, manager: "MTS100SubDevice"):
+        self.extra_state_attributes = {}
         super().__init__(
             manager,
             manager.id,
-            manager.build_binary_sensor_window(),
-            Mts100AdjustNumber(manager, self),
+            Mts100AdjustNumber,
             Mts100SetPointNumber,
             Mts100Schedule,
         )
+        self.binary_sensor_window = manager.build_binary_sensor_window()
+        self.switch_patch_hvacaction = MLConfigSwitch(
+            manager, manager.id, "patch_hvacaction"
+        )
+        self.switch_patch_hvacaction.register_state_callback(
+            self._switch_emulate_hvacaction_state_callback
+        )
 
-    @property
-    def scheduleBMode(self):
-        return self._attr_extra_state_attributes.get(mc.KEY_SCHEDULEBMODE)
+    # interface: MtsClimate
+    async def async_shutdown(self):
+        await super().async_shutdown()
+        self.binary_sensor_window: "MLBinarySensor" = None  # type: ignore
+        self.switch_patch_hvacaction: "MLConfigSwitch" = None  # type: ignore
 
-    @scheduleBMode.setter
-    def scheduleBMode(self, value):
-        if value:
-            self._attr_extra_state_attributes[mc.KEY_SCHEDULEBMODE] = value
+    def flush_state(self):
+        self.preset_mode = self.MTS_MODE_TO_PRESET_MAP.get(self._mts_mode)
+        if self._mts_onoff:
+            self.hvac_mode = MtsClimate.HVACMode.HEAT
+            if self.switch_patch_hvacaction.is_on:
+                # locally compute the state of the valve ignoring what's being
+                # reported in self._mts_active (see #331)
+                self.hvac_action = (
+                    MtsClimate.HVACAction.HEATING
+                    if (
+                        (self.target_temperature or 0) > (self.current_temperature or 0)
+                    )
+                    else MtsClimate.HVACAction.IDLE
+                )
+            else:
+                self.hvac_action = (
+                    MtsClimate.HVACAction.HEATING
+                    if self._mts_active
+                    else MtsClimate.HVACAction.IDLE
+                )
         else:
-            self._attr_extra_state_attributes.pop(mc.KEY_SCHEDULEBMODE)
+            self.hvac_mode = MtsClimate.HVACMode.OFF
+            self.hvac_action = MtsClimate.HVACAction.OFF
+        super().flush_state()
 
     async def async_set_hvac_mode(self, hvac_mode: MtsClimate.HVACMode):
         if hvac_mode == MtsClimate.HVACMode.OFF:
             await self.async_request_onoff(0)
-        else:
-            await self.async_request_onoff(1)
-
-    async def async_set_preset_mode(self, preset_mode: str):
-        mode = reverse_lookup(Mts100Climate.MTS_MODE_TO_PRESET_MAP, preset_mode)
-        if mode is not None:
-            if await self.manager.async_request_ack(
-                mc.NS_APPLIANCE_HUB_MTS100_MODE,
-                mc.METHOD_SET,
-                {mc.KEY_MODE: [{mc.KEY_ID: self.id, mc.KEY_STATE: mode}]},
-            ):
-                self._mts_mode = mode
-                self.update_mts_state()
-            if not self._mts_onoff:
-                await self.async_request_onoff(1)
+            return
+        await self.async_request_onoff(1)
 
     async def async_set_temperature(self, **kwargs):
-        # since the device only accepts values multiple of 5
-        # and offsets them by the current temp adjust
-        # we'll add 4 so it will eventually round down to the correct
-        # internal setpoint
-        key = Mts100Climate.PRESET_TO_TEMPERATUREKEY_MAP[
-            self._attr_preset_mode or Mts100Climate.PRESET_CUSTOM
-        ]
-        # when sending a temp this way the device will automatically
-        # exit auto mode if needed. Also it will round-down the value
-        # to the nearest multiple of 5
+        if (
+            self.SET_TEMP_FORCE_MANUAL_MODE and self._mts_mode != mc.MTS100_MODE_CUSTOM
+        ) or (self._mts_mode == mc.MTS100_MODE_AUTO):
+            # setting the temperature automatically switches
+            # to manual 'custom' mode. (2024-06-27) This is a change
+            # against previous behavior where the mode was retained
+            # (unless schedule mode) and the temp setting was directed to any
+            # of the presets, whichever was active at the moment.
+            # This is following #401 and seems more natural behavior.
+            # self.SET_TEMP_FORCE_MANUAL_MODE acts as a config bool
+            # to enable this behavior or fallback to the legacy one.
+            # Keep in mind we're not also forcing the device to 'ON'.
+            # This is intended (right now) to allow the user change
+            # the setpoint without implying the device switch on.
+            # Turning on/off the device must be an explicit action on HVACMode.
+            if await self.manager.async_request_ack(
+                mn.Appliance_Hub_Mts100_Mode.name,
+                mc.METHOD_SET,
+                {
+                    mn.Appliance_Hub_Mts100_Mode.key: [
+                        {mc.KEY_ID: self.id, mc.KEY_STATE: mc.MTS100_MODE_CUSTOM}
+                    ]
+                },
+            ):
+                self._mts_mode = mc.MTS100_MODE_CUSTOM
+
+        key = mc.MTS100_MODE_TO_CURRENTSET_MAP.get(self._mts_mode) or mc.KEY_CUSTOM
         if response := await self.manager.async_request_ack(
-            mc.NS_APPLIANCE_HUB_MTS100_TEMPERATURE,
+            mn.Appliance_Hub_Mts100_Temperature.name,
             mc.METHOD_SET,
             {
-                mc.KEY_TEMPERATURE: [
+                mn.Appliance_Hub_Mts100_Temperature.key: [
                     {
                         mc.KEY_ID: self.id,
                         key: round(
-                            kwargs[Mts100Climate.ATTR_TEMPERATURE] * mc.MTS_TEMP_SCALE
+                            kwargs[Mts100Climate.ATTR_TEMPERATURE] * self.device_scale
                         ),
                     }
                 ]
@@ -145,115 +163,86 @@ class Mts100Climate(MtsClimate):
         ):
             self._parse_temperature(response[mc.KEY_PAYLOAD][mc.KEY_TEMPERATURE][0])
 
+    async def async_request_mode(self, mode: int):
+        """Requests an mts mode and (ensure) turn-on"""
+        if await self.manager.async_request_ack(
+            mn.Appliance_Hub_Mts100_Mode.name,
+            mc.METHOD_SET,
+            {
+                mn.Appliance_Hub_Mts100_Mode.key: [
+                    {mc.KEY_ID: self.id, mc.KEY_STATE: mode}
+                ]
+            },
+        ):
+            self._mts_mode = mode
+            if not self._mts_onoff:
+                if await self.manager.async_request_ack(
+                    mn.Appliance_Hub_ToggleX.name,
+                    mc.METHOD_SET,
+                    {
+                        mn.Appliance_Hub_ToggleX.key: [
+                            {mc.KEY_ID: self.id, mc.KEY_ONOFF: 1}
+                        ]
+                    },
+                ):
+                    self._mts_onoff = 1
+            key_temp = mc.MTS100_MODE_TO_CURRENTSET_MAP.get(mode)
+            if key_temp in self._mts_payload:
+                target_temperature = self._mts_payload[key_temp]
+                self._mts_payload[mc.KEY_CURRENTSET] = target_temperature
+                self.target_temperature = target_temperature / self.device_scale
+            self.flush_state()
+
     async def async_request_onoff(self, onoff: int):
         if await self.manager.async_request_ack(
-            mc.NS_APPLIANCE_HUB_TOGGLEX,
+            mn.Appliance_Hub_ToggleX.name,
             mc.METHOD_SET,
-            {mc.KEY_TOGGLEX: [{mc.KEY_ID: self.id, mc.KEY_ONOFF: onoff}]},
+            {mn.Appliance_Hub_ToggleX.key: [{mc.KEY_ID: self.id, mc.KEY_ONOFF: onoff}]},
         ):
             self._mts_onoff = onoff
-            self.update_mts_state()
+            self.flush_state()
 
     def is_mts_scheduled(self):
         return self._mts_onoff and self._mts_mode == mc.MTS100_MODE_AUTO
 
-    def update_mts_state(self):
-        self._attr_preset_mode = self.MTS_MODE_TO_PRESET_MAP.get(self._mts_mode)  # type: ignore
-        if self._mts_onoff:
-            self._attr_hvac_mode = MtsClimate.HVACMode.HEAT
-            self._attr_hvac_action = (
-                MtsClimate.HVACAction.HEATING
-                if self._mts_active
-                else MtsClimate.HVACAction.IDLE
-            )
-        else:
-            self._attr_hvac_mode = MtsClimate.HVACMode.OFF
-            self._attr_hvac_action = MtsClimate.HVACAction.OFF
-
-        super().update_mts_state()
+    def get_ns_adjust(self):
+        return self.manager.hub.namespace_handlers[mn.Appliance_Hub_Mts100_Adjust.name]
 
     # message handlers
-    def _parse_temperature(self, p_temperature: dict):
-        if mc.KEY_ROOM in p_temperature:
-            self._attr_current_temperature = (
-                p_temperature[mc.KEY_ROOM] / mc.MTS_TEMP_SCALE
-            )
-            self.select_tracked_sensor.check_tracking()
-            self.manager.sensor_temperature.update_state(self._attr_current_temperature)
+    def _parse_temperature(self, payload: dict):
+        if self._mts_payload == payload:
+            return
+        self._mts_payload = payload
+        if mc.KEY_ROOM in payload:
+            self._update_current_temperature(payload[mc.KEY_ROOM])
+        if mc.KEY_CURRENTSET in payload:
+            self.target_temperature = payload[mc.KEY_CURRENTSET] / self.device_scale
+        if mc.KEY_MIN in payload:
+            self.min_temp = payload[mc.KEY_MIN] / self.device_scale
+        if mc.KEY_MAX in payload:
+            self.max_temp = payload[mc.KEY_MAX] / self.device_scale
+        if mc.KEY_HEATING in payload:
+            self._mts_active = payload[mc.KEY_HEATING]
+        if mc.KEY_OPENWINDOW in payload:
+            self.binary_sensor_window.update_onoff(payload[mc.KEY_OPENWINDOW])
 
-        p_temperature_patch = {}
-        _mts_adjusted_temperature = self._mts_adjusted_temperature
-        # patch the mts rounding: the mts has a 'default' resolution of 0.5
-        # (5 points in device units). If we set a temp adjust with sub-resolution
-        # (like 0.1 °C for example) the device accepts that and starts offsetting the room
-        # temperature but also starts to 'mess' its setpoints since it clearly
-        # (or buggly) cannot manage these sub-resolutions (1-2-3-4 device points)
-        # This code was an attempt to patch this rounding issue but even if somewhat working
-        # it is not reliable (likely because updates are 'so asynchronous' that we always risk
-        # loosing the setpoint track/patch algorithm since it works a bit like differential
-        # encoders readers used in elctro-mechanics)
-        # To totally overcome the issue, we've now 'fixed' also the resolution of temp adjust
-        # to 0.5 °C and this appears to work consistently. The code is left (should no harm)
-        # for future reference or tries
-        for key in (
-            mc.KEY_CURRENTSET,
-            mc.KEY_CUSTOM,
-            mc.KEY_COMFORT,
-            mc.KEY_ECONOMY,
-            mc.KEY_AWAY,
-        ):
-            if key not in p_temperature:
-                continue
-            _t = p_temperature[key]
-            adjust = _t % 5
-            if adjust:
-                _t = _t - adjust
-            if key in _mts_adjusted_temperature:
-                _t_current = _mts_adjusted_temperature[key]
-                if _t == _t_current:
-                    # no change in our entity state
-                    continue
-                elif adjust and _t + 5 == _t_current:
-                    # a change in mts adjust temperature rounded down a bit our setpoint
-                    # so we 'fix' the mts
-                    p_temperature_patch[key] = _t_current + adjust
-                    continue
-            _mts_adjusted_temperature[key] = _t
+        for (
+            key_temp,
+            number_preset_temperature,
+        ) in self.number_preset_temperature.items():
+            if key_temp in payload:
+                number_preset_temperature.update_device_value(payload[key_temp])
 
-            if key is mc.KEY_CURRENTSET:
-                self._attr_target_temperature = _t / mc.MTS_TEMP_SCALE
-            elif key is mc.KEY_COMFORT:
-                self.number_comfort_temperature.update_native_value(_t)
-            elif key is mc.KEY_ECONOMY:
-                self.number_sleep_temperature.update_native_value(_t)
-            elif key is mc.KEY_AWAY:
-                self.number_away_temperature.update_native_value(_t)
+        self.flush_state()
 
-        if p_temperature_patch:
-            p_temperature_patch[mc.KEY_ID] = self.id
-            # TODO: this request should just fix the mts100 to the values expected
-            # in HA but we're not sure and we should check the response and
-            # see if it fits. We should use the await version and process the SET_ACK
-            # payload since it carries the mts state but our code, as a general rule,
-            # discards every SET_ACK. Here (manager.request) we still have the calback
-            # for this but it's going to be removed in the next major release
-            # The mts state will anyway be eventually pushed or we'll poll it very soon
-            self.manager.request(
-                mc.NS_APPLIANCE_HUB_MTS100_TEMPERATURE,
-                mc.METHOD_SET,
-                {mc.KEY_TEMPERATURE: [p_temperature_patch]},
-            )
+    # interface: self
+    def update_scheduleb_mode(self, mode):
+        self.extra_state_attributes[mc.KEY_SCHEDULEBMODE] = mode
+        self.schedule._schedule_entry_count_max = mode
+        self.schedule._schedule_entry_count_min = mode
 
-        if mc.KEY_MIN in p_temperature:
-            self._attr_min_temp = p_temperature[mc.KEY_MIN] / mc.MTS_TEMP_SCALE
-        if mc.KEY_MAX in p_temperature:
-            self._attr_max_temp = p_temperature[mc.KEY_MAX] / mc.MTS_TEMP_SCALE
-        if mc.KEY_HEATING in p_temperature:
-            self._mts_active = p_temperature[mc.KEY_HEATING]
-        if mc.KEY_OPENWINDOW in p_temperature:
-            self.binary_sensor_window.update_onoff(p_temperature[mc.KEY_OPENWINDOW])
-
-        self.update_mts_state()
+    def _switch_emulate_hvacaction_state_callback(self):
+        self.flush_state()
 
 
 class Mts100SetPointNumber(MtsSetPointNumber):
@@ -261,17 +250,14 @@ class Mts100SetPointNumber(MtsSetPointNumber):
     customize MtsSetPointNumber to interact with Mts100 family valves
     """
 
-    namespace = mc.NS_APPLIANCE_HUB_MTS100_TEMPERATURE
-    key_namespace = mc.KEY_TEMPERATURE
-    key_channel = mc.KEY_ID
+    ns = mn.Appliance_Hub_Mts100_Temperature
 
 
 class Mts100Schedule(MtsSchedule):
-    namespace = mc.NS_APPLIANCE_HUB_MTS100_SCHEDULEB
-    key_channel = mc.KEY_ID
+    ns = mn.Appliance_Hub_Mts100_ScheduleB
 
     def __init__(self, climate: Mts100Climate):
         super().__init__(climate)
         self._schedule_unit_time = climate.manager.hub.descriptor.ability.get(
-            mc.NS_APPLIANCE_HUB_MTS100_SCHEDULEB, {}
+            mn.Appliance_Hub_Mts100_ScheduleB.name, {}
         ).get(mc.KEY_SCHEDULEUNITTIME, 15)

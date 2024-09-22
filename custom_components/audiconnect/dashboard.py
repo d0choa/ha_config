@@ -2,7 +2,22 @@
 
 import logging
 import re
-from datetime import datetime
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorStateClass,
+)
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfTime,
+    UnitOfLength,
+    UnitOfTemperature,
+    UnitOfPower,
+    UnitOfElectricCurrent,
+    EntityCategory,
+)
+from .util import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,12 +34,9 @@ class Instrument:
     def __repr__(self):
         return self.full_name
 
-    def configurate(self, **args):
-        pass
-
     def camel2slug(self, s):
         """Convert camelCase to camel_case.
-        >>> camel2slug('fooBar')
+            >>> camel2slug('fooBar')
         'foo_bar'
         """
         return re.sub("([A-Z])", "_\\1", s).lower().lstrip("_")
@@ -48,8 +60,6 @@ class Instrument:
             return False
 
         # _LOGGER.debug("%s is supported", self)
-
-        self.configurate(**config)
 
         return True
 
@@ -75,7 +85,7 @@ class Instrument:
 
     @property
     def full_name(self):
-        return "%s %s" % (self.vehicle_name, self._name)
+        return "{} {}".format(self.vehicle_name, self._name)
 
     @property
     def vehicle_model(self):
@@ -126,18 +136,24 @@ class Instrument:
 
 
 class Sensor(Instrument):
-    def __init__(self, attr, name, icon, unit):
+    def __init__(
+        self,
+        attr,
+        name,
+        icon=None,
+        unit=None,
+        state_class=None,
+        device_class=None,
+        entity_category=None,
+        extra_state_attributes=None,
+    ):
         super().__init__(component="sensor", attr=attr, name=name, icon=icon)
+        self.device_class = device_class
         self._unit = unit
+        self.state_class = state_class
+        self.entity_category = entity_category
+        self.extra_state_attributes = extra_state_attributes
         self._convert = False
-
-    def configurate(self, unit_system=None, **config):
-        if self._unit and unit_system == "imperial" and "km" in self._unit:
-            self._unit = "mi"
-            self._convert = True
-        elif self._unit and unit_system == "metric" and "mi" in self._unit:
-            self._unit = "km"
-            self._convert = True
 
     @property
     def is_mutable(self):
@@ -146,19 +162,13 @@ class Sensor(Instrument):
     @property
     def str_state(self):
         if self.unit:
-            return "%s %s" % (self.state, self.unit)
+            return "{} {}".format(self.state, self.unit)
         else:
             return "%s" % self.state
 
     @property
     def state(self):
-        val = super().state
-        if val and self._unit and "mi" in self._unit and self._convert == True:
-            return round(val / 1.609344)
-        elif val and self._unit and "km" in self._unit and self._convert == True:
-            return round(val * 1.609344)
-        else:
-            return val
+        return super().state
 
     @property
     def unit(self):
@@ -170,9 +180,10 @@ class Sensor(Instrument):
 
 
 class BinarySensor(Instrument):
-    def __init__(self, attr, name, device_class, icon=None):
+    def __init__(self, attr, name, device_class=None, icon=None, entity_category=None):
         super().__init__(component="binary_sensor", attr=attr, name=name, icon=icon)
         self.device_class = device_class
+        self.entity_category = entity_category
 
     @property
     def is_mutable(self):
@@ -260,7 +271,12 @@ class Switch(Instrument):
 
 class Preheater(Instrument):
     def __init__(self):
-        super().__init__(component="switch", attr="preheater_active", name="Preheater", icon="mdi:radiator")
+        super().__init__(
+            component="switch",
+            attr="preheater_active",
+            name="Preheater",
+            icon="mdi:radiator",
+        )
 
     @property
     def is_mutable(self):
@@ -314,7 +330,10 @@ class Position(Instrument):
 class TripData(Instrument):
     def __init__(self, attr, name):
         super().__init__(component="sensor", attr=attr, name=name)
+        self.device_class = SensorDeviceClass.TIMESTAMP
         self.unit = None
+        self.state_class = None
+        self.entity_category = None
 
     @property
     def is_mutable(self):
@@ -344,8 +363,26 @@ class TripData(Instrument):
 
     @property
     def state(self):
-        val = super().state
-        return val
+        td = super().state
+        return parse_datetime(td["timestamp"])
+
+    @property
+    def extra_state_attributes(self):
+        td = super().state
+        attr = {
+            "averageElectricEngineConsumption": td.get(
+                "averageElectricEngineConsumption", None
+            ),
+            "averageFuelConsumption": td.get("averageFuelConsumption", None),
+            "averageSpeed": td.get("averageSpeed", None),
+            "mileage": td.get("mileage", None),
+            "overallMileage": td.get("overallMileage", None),
+            "startMileage": td.get("startMileage", None),
+            "traveltime": td.get("traveltime", None),
+            "tripID": td.get("tripID", None),
+            "zeroEmissionDistance": td.get("zeroEmissionDistance", None),
+        }
+        return attr
 
 
 class LastUpdate(Instrument):
@@ -356,7 +393,11 @@ class LastUpdate(Instrument):
             name="Last Update",
             icon="mdi:update",
         )
+        self.device_class = SensorDeviceClass.TIMESTAMP
         self.unit = None
+        self.state_class = None
+        self.entity_category = None
+        self.extra_state_attributes = None
 
     @property
     def is_mutable(self):
@@ -365,14 +406,11 @@ class LastUpdate(Instrument):
     @property
     def str_state(self):
         ts = super().state
-        if type(ts) == datetime:
-           return str(ts.astimezone(tz=None)) if ts else None
-        return ts
+        return ts.astimezone(tz=None).isoformat() if ts else None
 
     @property
     def state(self):
-        val = super().state
-        return val
+        return super().state
 
 
 def create_instruments():
@@ -385,142 +423,358 @@ def create_instruments():
         TripData(attr="longterm_reset", name="LongTerm Trip User Reset"),
         Lock(),
         Preheater(),
-        Sensor(attr="model", name="Model", icon="mdi:car-info", unit=None),
-        Sensor(attr="mileage", name="Mileage", icon="mdi:speedometer", unit="km"),
-        Sensor(attr="range", name="Range", icon="mdi:gas-station", unit="km"),
+        Sensor(
+            attr="model",
+            name="Model",
+            icon="mdi:car-info",
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        Sensor(
+            attr="mileage",
+            name="Mileage",
+            icon="mdi:counter",
+            unit=UnitOfLength.KILOMETERS,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            device_class=SensorDeviceClass.DISTANCE,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        Sensor(
+            attr="service_adblue_distance",
+            name="AdBlue range",
+            icon="mdi:map-marker-distance",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
+        ),
+        Sensor(
+            attr="range",
+            name="Range",
+            icon="mdi:map-marker-distance",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
+        ),
+        Sensor(
+            attr="hybrid_range",
+            name="hybrid Range",
+            icon="mdi:map-marker-distance",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
+        ),
         Sensor(
             attr="service_inspection_time",
             name="Service inspection time",
             icon="mdi:room-service-outline",
-            unit="days",
+            unit=UnitOfTime.DAYS,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
         Sensor(
             attr="service_inspection_distance",
             name="Service inspection distance",
             icon="mdi:room-service-outline",
-            unit="km",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
         Sensor(
-            attr="oil_change_time", name="Oil change time", icon="mdi:oil", unit="days"
+            attr="oil_change_time",
+            name="Oil change time",
+            icon="mdi:oil",
+            unit=UnitOfTime.DAYS,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
         Sensor(
             attr="oil_change_distance",
             name="Oil change distance",
             icon="mdi:oil",
-            unit="km",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
-        Sensor(attr="oil_level", name="Oil level", icon="mdi:oil", unit="%"),
+        Sensor(
+            attr="oil_level",
+            name="Oil level",
+            icon="mdi:oil",
+            unit=PERCENTAGE,
+        ),
         Sensor(
             attr="charging_state",
             name="Charging state",
             icon="mdi:car-battery",
-            unit=None,
         ),
         Sensor(
-            attr="charging_mode", name="Charging mode", icon=None, unit=None
+            attr="charging_mode",
+            name="Charging mode",
         ),
         Sensor(
-            attr="energy_flow", name="Energy flow", icon=None, unit=None
+            attr="energy_flow",
+            name="Energy flow",
         ),
         Sensor(
             attr="max_charge_current",
             name="Max charge current",
             icon="mdi:current-ac",
-            unit="A",
+            unit=UnitOfElectricCurrent.AMPERE,
+            device_class=SensorDeviceClass.CURRENT,
         ),
         Sensor(
             attr="primary_engine_type",
             name="Primary engine type",
             icon="mdi:engine",
-            unit=None,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
         Sensor(
             attr="secondary_engine_type",
             name="Secondary engine type",
             icon="mdi:engine",
-            unit=None,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
         Sensor(
             attr="primary_engine_range",
             name="Primary engine range",
-            icon="mdi:gas-station-outline",
-            unit="km",
+            icon="mdi:map-marker-distance",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
         ),
         Sensor(
             attr="secondary_engine_range",
             name="Secondary engine range",
-            icon="mdi:gas-station-outline",
-            unit="km",
+            icon="mdi:map-marker-distance",
+            unit=UnitOfLength.KILOMETERS,
+            device_class=SensorDeviceClass.DISTANCE,
         ),
         Sensor(
-            attr="charging_power", name="Charging power", icon="mdi:flash", unit="kW"
+            attr="primary_engine_range_percent",
+            name="Primary engine Percent",
+            icon="mdi:gauge",
+            unit=PERCENTAGE,
+        ),
+        Sensor(
+            attr="car_type",
+            name="Car Type",
+            icon="mdi:car-info",
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        Sensor(
+            attr="secondary_engine_range_percent",
+            name="Secondary engine Percent",
+            icon="mdi:gauge",
+            unit=PERCENTAGE,
+        ),
+        Sensor(
+            attr="charging_power",
+            name="Charging power",
+            icon="mdi:flash",
+            unit=UnitOfPower.KILO_WATT,
+            device_class=SensorDeviceClass.POWER,
         ),
         Sensor(
             attr="actual_charge_rate",
             name="Charging rate",
             icon="mdi:electron-framework",
-            unit=None,
         ),
-        Sensor(attr="tank_level", name="Tank level", icon="mdi:gas-station", unit="%"),
+        Sensor(
+            attr="tank_level",
+            name="Tank level",
+            icon="mdi:gauge",
+            unit=PERCENTAGE,
+        ),
         Sensor(
             attr="state_of_charge",
             name="State of charge",
             icon="mdi:ev-station",
-            unit="%",
+            unit=PERCENTAGE,
         ),
         Sensor(
             attr="remaining_charging_time",
             name="Remaining charge time",
             icon="mdi:battery-charging",
-            unit=None,
         ),
-        Sensor(attr="plug_state", name="Plug state", icon="mdi:power-plug", unit=None),
+        Sensor(
+            attr="charging_complete_time",
+            name="Charging Complete Time",
+            icon="mdi:battery-charging",
+            device_class=SensorDeviceClass.TIMESTAMP,
+        ),
+        Sensor(
+            attr="target_state_of_charge",
+            name="Target State of charge",
+            icon="mdi:ev-station",
+            unit=PERCENTAGE,
+        ),
+        Sensor(
+            attr="plug_state",
+            name="Plug state",
+            icon="mdi:ev-plug-type1",
+        ),
+        Sensor(
+            attr="plug_lock_state",
+            name="Plug Lock state",
+            icon="mdi:ev-plug-type1",
+        ),
+        Sensor(
+            attr="external_power",
+            name="External Power",
+            icon="mdi:ev-station",
+        ),
+        Sensor(
+            attr="plug_led_color",
+            name="Plug LED Color",
+            icon="mdi:ev-plug-type1",
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
         Sensor(
             attr="doors_trunk_status",
             name="Doors/trunk state",
             icon="mdi:car-door",
-            unit=None,
         ),
         Sensor(
             attr="climatisation_state",
             name="Climatisation state",
             icon="mdi:air-conditioner",
-            unit=None,
         ),
         Sensor(
             attr="outdoor_temperature",
             name="Outdoor Temperature",
             icon="mdi:temperature-celsius",
-            unit="°C",
+            unit=UnitOfTemperature.CELSIUS,
+            device_class=SensorDeviceClass.TEMPERATURE,
         ),
-        Sensor(attr="preheater_duration", name="Preheater runtime", icon="mdi:clock", unit="Min"),
-        Sensor(attr="preheater_remaining", name="Preheater remaining", icon="mdi:clock", unit="Min"),
-        BinarySensor(attr="sun_roof", name="Sun roof", device_class="window"),
+        Sensor(
+            attr="park_time",
+            name="Park Time",
+            icon="mdi:car-clock",
+            device_class=SensorDeviceClass.TIMESTAMP,
+        ),
+        Sensor(
+            attr="remaining_climatisation_time",
+            name="Remaining Climatisation Time",
+            icon="mdi:fan-clock",
+            unit=UnitOfTime.MINUTES,
+        ),
+        BinarySensor(
+            attr="glass_surface_heating",
+            name="Glass Surface Heating",
+            icon="mdi:car-defrost-front",
+            device_class=BinarySensorDeviceClass.RUNNING,
+        ),
+        Sensor(
+            attr="preheater_duration",
+            name="Preheater runtime",
+            icon="mdi:clock",
+            unit=UnitOfTime.MINUTES,
+        ),
+        Sensor(
+            attr="preheater_remaining",
+            name="Preheater remaining",
+            icon="mdi:clock",
+            unit=UnitOfTime.MINUTES,
+        ),
+        BinarySensor(
+            attr="sun_roof",
+            name="Sun roof",
+            device_class=BinarySensorDeviceClass.WINDOW,
+        ),
+        BinarySensor(
+            attr="roof_cover",
+            name="Roof Cover",
+            device_class=BinarySensorDeviceClass.WINDOW,
+        ),
         BinarySensor(
             attr="parking_light",
             name="Parking light",
-            device_class="safety",
+            device_class=BinarySensorDeviceClass.SAFETY,
             icon="mdi:lightbulb",
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
-        BinarySensor(attr="any_window_open", name="Windows", device_class="window"),
-        BinarySensor(attr="any_door_unlocked", name="Doors lock", device_class="lock"),
-        BinarySensor(attr="any_door_open", name="Doors", device_class="door"),
-        BinarySensor(attr="trunk_unlocked", name="Trunk lock", device_class="lock"),
-        BinarySensor(attr="trunk_open", name="Trunk", device_class="door"),
-        BinarySensor(attr="hood_open", name="Hood", device_class="door"),
-        BinarySensor(attr="left_front_door_open", name="Left front door", device_class="door"),
-        BinarySensor(attr="right_front_door_open", name="Right front door", device_class="door"),
-        BinarySensor(attr="left_rear_door_open", name="Left rear door", device_class="door"),
-        BinarySensor(attr="right_rear_door_open", name="Right rear door", device_class="door"),
-        BinarySensor(attr="left_front_window_open", name="Left front window", device_class="window"),
-        BinarySensor(attr="right_front_window_open", name="Right front window", device_class="window"),
-        BinarySensor(attr="left_rear_window_open", name="Left rear window", device_class="window"),
-        BinarySensor(attr="right_rear_window_open", name="Right rear window", device_class="window"),
+        BinarySensor(
+            attr="any_window_open",
+            name="Windows",
+            device_class=BinarySensorDeviceClass.WINDOW,
+        ),
+        BinarySensor(
+            attr="any_door_unlocked",
+            name="Doors lock",
+            device_class=BinarySensorDeviceClass.LOCK,
+        ),
+        BinarySensor(
+            attr="any_door_open",
+            name="Doors",
+            device_class=BinarySensorDeviceClass.DOOR,
+        ),
+        BinarySensor(
+            attr="trunk_unlocked",
+            name="Trunk lock",
+            device_class=BinarySensorDeviceClass.LOCK,
+        ),
+        BinarySensor(
+            attr="trunk_open",
+            name="Trunk",
+            device_class=BinarySensorDeviceClass.DOOR,
+        ),
+        BinarySensor(
+            attr="hood_open",
+            name="Hood",
+            device_class=BinarySensorDeviceClass.DOOR,
+        ),
+        BinarySensor(
+            attr="left_front_door_open",
+            name="Left front door",
+            device_class=BinarySensorDeviceClass.DOOR,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="right_front_door_open",
+            name="Right front door",
+            device_class=BinarySensorDeviceClass.DOOR,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="left_rear_door_open",
+            name="Left rear door",
+            device_class=BinarySensorDeviceClass.DOOR,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="right_rear_door_open",
+            name="Right rear door",
+            device_class=BinarySensorDeviceClass.DOOR,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="left_front_window_open",
+            name="Left front window",
+            device_class=BinarySensorDeviceClass.WINDOW,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="right_front_window_open",
+            name="Right front window",
+            device_class=BinarySensorDeviceClass.WINDOW,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="left_rear_window_open",
+            name="Left rear window",
+            device_class=BinarySensorDeviceClass.WINDOW,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        BinarySensor(
+            attr="right_rear_window_open",
+            name="Right rear window",
+            device_class=BinarySensorDeviceClass.WINDOW,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
         BinarySensor(
             attr="braking_status",
             name="Braking status",
-            device_class="safety",
+            device_class=BinarySensorDeviceClass.SAFETY,
             icon="mdi:car-brake-abs",
+        ),
+        BinarySensor(
+            attr="oil_level_binary",
+            name="Oil Level Binary",
+            icon="mdi:oil",
+            device_class=BinarySensorDeviceClass.PROBLEM,
+            entity_category=EntityCategory.DIAGNOSTIC,
         ),
     ]
 

@@ -69,3 +69,37 @@ devices:
     friendly_name: Puerta Zapatero
   '0x001788010918c767':
     friendly_name: Garaje
+  '0x287681fffefbc1a7':
+    friendly_name: VINDSTYRKA
+  '0x00158d00075c0019':
+    friendly_name: Lavadora
+  '0x00158d0006fe5c4a':
+    friendly_name: Secadora
+  '0x00178801097ba60e':
+    friendly_name: Foco 1
+  '0x00178801096e3322':
+    friendly_name: Foco 2
+  '0x0017880109744f49':
+    friendly_name: Foco 4
+  '0x00178801097b9a3c':
+    friendly_name: Foco 3
+  '0x00178801097472c1':
+    friendly_name: Foco 7
+  '0x00178801096e46b9':
+    friendly_name: Foco 8
+  '0x00178801097472db':
+    friendly_name: Foco 10
+  '0x0017880109744f1c':
+    friendly_name: Foco 5
+  '0x00178801096e3318':
+    friendly_name: Foco 6
+  '0x001788010974763b':
+    friendly_name: Foco 9
+  '0x00158d0007bef295':
+    friendly_name: Cocina
+  '0x00158d0007c4a063':
+    friendly_name: Pasillo Motion
+  '0x00158d0007f84cd1':
+    friendly_name: Buzon
+  '0xa4c1380094ecb55e':
+    friendly_name: Salon

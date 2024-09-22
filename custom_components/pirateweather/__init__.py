@@ -1,36 +1,33 @@
 """The Pirate Weather component."""
+
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
-
-from datetime import timedelta
-
 from homeassistant.config_entries import ConfigEntry
-
-
 from homeassistant.const import (
     CONF_API_KEY,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_MODE,
-    CONF_NAME,
     CONF_MONITORED_CONDITIONS,
+    CONF_NAME,
     CONF_SCAN_INTERVAL,
 )
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_UNITS,
     DOMAIN,
     ENTRY_NAME,
     ENTRY_WEATHER_COORDINATOR,
     PLATFORMS,
-    UPDATE_LISTENER,
-    CONF_UNITS,
-    PW_PLATFORMS,
     PW_PLATFORM,
+    PW_PLATFORMS,
     PW_ROUND,
+    UPDATE_LISTENER,
 )
 
 # from .weather_update_coordinator import WeatherUpdateCoordinator, DarkSkyData
@@ -56,7 +53,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     forecast_hours = _get_config_value(entry, CONF_HOURLY_FORECAST)
     pw_entity_platform = _get_config_value(entry, PW_PLATFORM)
     pw_entity_rounding = _get_config_value(entry, PW_ROUND)
-    pw_scan_Int = entry.data[CONF_SCAN_INTERVAL]
+    pw_scan_Int = _get_config_value(entry, CONF_SCAN_INTERVAL)
+
+    if not pw_scan_Int:
+        pw_scan_Int = entry.data[CONF_SCAN_INTERVAL]
+
+    pw_scan_Int = max(pw_scan_Int, 60)
 
     # Extract list of int from forecast days/ hours string if present
     # _LOGGER.warning('forecast_days_type: ' + str(type(forecast_days)))
@@ -64,7 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # _LOGGER.warning(forecast_days)
     if isinstance(forecast_days, str):
         # If empty, set to none
-        if forecast_days == "" or forecast_days == "None":
+        if forecast_days in {"", "None"}:
             forecast_days = None
         else:
             if forecast_days[0] == "[":
@@ -75,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if isinstance(forecast_hours, str):
         # If empty, set to none
-        if forecast_hours == "" or forecast_hours == "None":
+        if forecast_hours in {"", "None"}:
             forecast_hours = None
         else:
             if forecast_hours[0] == "[":
@@ -112,6 +114,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_SCAN_INTERVAL: pw_scan_Int,
     }
 
+    # Setup platforms
     # If both platforms
     if (PW_PLATFORMS[0] in pw_entity_platform) and (
         PW_PLATFORMS[1] in pw_entity_platform
@@ -119,10 +122,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # If only sensor
     elif PW_PLATFORMS[0] in pw_entity_platform:
-        await hass.config_entries.async_forward_entry_setup(entry, PLATFORMS[0])
+        await hass.config_entries.async_forward_entry_setups(entry, [PLATFORMS[0]])
     # If only weather
     elif PW_PLATFORMS[1] in pw_entity_platform:
-        await hass.config_entries.async_forward_entry_setup(entry, PLATFORMS[1])
+        await hass.config_entries.async_forward_entry_setups(entry, [PLATFORMS[1]])
 
     update_listener = entry.add_update_listener(async_update_options)
     hass.data[DOMAIN][entry.entry_id][UPDATE_LISTENER] = update_listener
@@ -136,7 +139,6 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-
     pw_entity_prevplatform = hass.data[DOMAIN][entry.entry_id][PW_PLATFORM]
 
     # If both
@@ -167,7 +169,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _get_config_value(config_entry: ConfigEntry, key: str) -> Any:
-    if config_entry.options:
+    if config_entry.options and key in config_entry.options:
         return config_entry.options[key]
     return config_entry.data[key]
 

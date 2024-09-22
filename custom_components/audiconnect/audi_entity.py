@@ -1,8 +1,9 @@
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
-    async_dispatcher_send,
 )
+from homeassistant.helpers.entity import DeviceInfo
+
 
 from .const import DOMAIN, SIGNAL_STATE_UPDATED
 
@@ -73,9 +74,15 @@ class AudiEntity(Entity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._instrument.vehicle_name)},
-            "manufacturer": "Audi",
-            "name": self._vehicle_name,
-            "model": self._instrument.vehicle_model_family,
-        }
+        if self._instrument.vehicle_model:
+            model_info = self._instrument.vehicle_model.replace("Audi ", "")
+        elif self._instrument.vehicle_name:
+            model_info = self._instrument.vehicle_name
+        else:
+            model_info = "Unknown"
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._instrument.vehicle_name)},
+            manufacturer="Audi",
+            name=self._instrument.vehicle_name,
+            model="{} ({})".format(model_info, self._instrument.vehicle_model_year),
+        )

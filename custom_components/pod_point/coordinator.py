@@ -1,6 +1,8 @@
 """
 Data coordinator for pod point client
 """
+
+from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Set, Tuple
 
@@ -13,6 +15,7 @@ from podpointclient.client import PodPointClient
 from podpointclient.errors import ApiConnectionError, AuthError, SessionError
 from podpointclient.pod import Firmware, Pod
 from podpointclient.user import User
+import pytz
 
 from .const import DOMAIN, LIMITED_POD_INCLUDES
 
@@ -25,10 +28,7 @@ class PodPointDataUpdateCoordinator(DataUpdateCoordinator):
     _firmware_refresh_interval = 5  # How many refreshes between a firmware update call
 
     def __init__(
-        self,
-        hass: HomeAssistant,
-        client: PodPointClient,
-        scan_interval: int
+        self, hass: HomeAssistant, client: PodPointClient, scan_interval: timedelta
     ) -> None:
         """Initialize."""
         self.api: PodPointClient = client
@@ -45,6 +45,7 @@ class PodPointDataUpdateCoordinator(DataUpdateCoordinator):
         self.online = None
         self.firmware_refresh = 1  # Initial refresh will be a firmware refresh too, ensuring we pull firmware for all pods at startup
         self.user: User = None
+        self.last_message_at = datetime(1970, 1, 1, 0, 0, 0, 0, pytz.UTC)
 
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=scan_interval)
 
@@ -56,6 +57,7 @@ class PodPointDataUpdateCoordinator(DataUpdateCoordinator):
             self.pod_dict: Dict[int, Pod] = None
 
             self.user = await self.api.async_get_user()
+
             new_pods = await self.__async_update_pods()
 
             _LOGGER.debug(
@@ -68,14 +70,23 @@ class PodPointDataUpdateCoordinator(DataUpdateCoordinator):
             # they were performed on
             new_pods_by_id = self.__group_pods_by_unit_id(pods=new_pods)
 
-            (new_pods, new_pods_by_id) = await self.__async_group_pods(new_pods, new_pods_by_id)
+            (new_pods, new_pods_by_id) = await self.__async_group_pods(
+                new_pods, new_pods_by_id
+            )
 
             new_pods_by_id = self.__group_pods_by_unit_id(pods=new_pods)
 
             # Fetch firmware data for pods, if it is needed
             self.firmware_refresh -= 1
             if self.firmware_refresh <= 0:
-                new_pods_by_id = await self.__async_refresh_firmware(new_pods, new_pods_by_id)
+                new_pods_by_id = await self.__async_refresh_firmware(
+                    new_pods, new_pods_by_id
+                )
+
+            # Fetch connection status data for pods
+            new_pods_by_id = await self.__async_update_pod_connection_status(
+                new_pods_by_id
+            )
 
             # Determine if we should fetch for all charges, or just the most recent for a user.
             should_fetch_all_charges = self.__should_fetch_all_charges(
@@ -173,7 +184,7 @@ Updated Charges: %s\nCombined Charges: %s",
                 "Recieved an unexpected exception when updating data from Pod Point. \
 If this issue persists, please contact the developer."
             )
-            _LOGGER.error(exception)
+            _LOGGER.exception(exception)
             raise UpdateFailed() from exception
 
     def __group_pods_by_unit_id(self, pods: List[Pod] = None) -> Dict[int, Pod]:
@@ -302,17 +313,13 @@ expecting more charges. Page {page}, looking for : {last_charge_ids}"
         # Should we get a limited set of data (subsiquent refreshes)
         if len(self.pods) > 0:
             _LOGGER.debug("Existing pods found, performing a limited data pull")
-            return await self.api.async_get_all_pods(
-                includes=LIMITED_POD_INCLUDES
-            )
+            return await self.api.async_get_all_pods(includes=LIMITED_POD_INCLUDES)
         else:
             _LOGGER.debug("No existing pods found, performing a full data pull")
             return await self.api.async_get_all_pods()
 
     async def __async_group_pods(
-        self,
-        new_pods,
-        new_pods_by_id
+        self, new_pods, new_pods_by_id
     ) -> Tuple[List[Pod], Dict[str, Pod]]:
         # Attempt to update our new pods with additional data from the existing pods.
         # This allows us to query less data each refresh, kinder on the Pod Point APIs.
@@ -332,16 +339,12 @@ expecting more charges. Page {page}, looking for : {last_charge_ids}"
         return (new_pods, new_pods_by_id)
 
     async def __async_refresh_firmware(
-        self,
-        new_pods: List[Pod],
-        new_pods_by_id: Dict[str, List[Pod]]
-    ) -> Dict[str, List[Pod]]:
+        self, new_pods: List[Pod], new_pods_by_id: Dict[str, Pod]
+    ) -> Dict[str, Pod]:
         _LOGGER.debug("=== FIRMWARE STATUS UPDATE ===")
 
         for pod in new_pods:
-            pod_firmwares: List[Firmware] = await self.api.async_get_firmware(
-                pod=pod
-            )
+            pod_firmwares: List[Firmware] = await self.api.async_get_firmware(pod=pod)
 
             if len(pod_firmwares) <= 0:
                 _LOGGER.warning(
@@ -359,5 +362,27 @@ expecting more charges. Page {page}, looking for : {last_charge_ids}"
                     new_pods_by_id[pod.unit_id] = pod
 
         self.firmware_refresh = self._firmware_refresh_interval
+
+        return new_pods_by_id
+
+    async def __async_update_pod_connection_status(
+        self, new_pods_by_id: Dict[str, Pod]
+    ) -> Dict[str, Pod]:
+        _LOGGER.debug("=== POD CONNECTION STATUS UPDATE ===")
+
+        # flat_pods = [item for row in new_pods_by_id.values() for item in row]
+        # Fetch connection status for each pod
+        for pod in new_pods_by_id.values():
+            connectivity_status = await self.api.async_get_connectivity_status(pod=pod)
+
+            if connectivity_status is not None:
+                pod.connectivity_status = connectivity_status
+                pod.last_message_at = connectivity_status.last_message_at
+                pod.charging_state = connectivity_status.charging_state
+
+                if pod.charging_state is not None:
+                    pod.charging_state = pod.charging_state.lower().replace("_", "-")
+
+                new_pods_by_id[pod.unit_id] = pod
 
         return new_pods_by_id

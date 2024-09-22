@@ -14,6 +14,7 @@
 
 """Config flow for Eufy Robovac integration."""
 from __future__ import annotations
+import json
 
 import logging
 from typing import Any, Optional
@@ -39,10 +40,17 @@ from homeassistant.const import (
     CONF_IP_ADDRESS,
     CONF_DESCRIPTION,
     CONF_MAC,
-    CONF_LOCATION,
     CONF_CLIENT_ID,
     CONF_REGION,
     CONF_TIME_ZONE,
+    CONF_COUNTRY_CODE,
+)
+
+from .countries import (
+    get_phone_code_by_country_code,
+    get_phone_code_by_region,
+    get_region_by_country_code,
+    get_region_by_phone_code,
 )
 
 from .const import CONF_AUTODISCOVERY, DOMAIN, CONF_VACS
@@ -88,15 +96,41 @@ def get_eufy_vacuums(self):
     settings_response = response.json()
 
     self[CONF_CLIENT_ID] = user_response["user_info"]["id"]
-    self[CONF_REGION] = settings_response["setting"]["home_setting"]["tuya_home"][
-        "tuya_region_code"
-    ]
+    if (
+        "tuya_home" in settings_response["setting"]["home_setting"]
+        and "tuya_region_code"
+        in settings_response["setting"]["home_setting"]["tuya_home"]
+    ):
+        self[CONF_REGION] = settings_response["setting"]["home_setting"]["tuya_home"][
+            "tuya_region_code"
+        ]
+        if user_response["user_info"]["phone_code"]:
+            self[CONF_COUNTRY_CODE] = user_response["user_info"]["phone_code"]
+        else:
+            self[CONF_COUNTRY_CODE] = get_phone_code_by_region(self[CONF_REGION])
+    elif user_response["user_info"]["phone_code"]:
+        self[CONF_REGION] = get_region_by_phone_code(
+            user_response["user_info"]["phone_code"]
+        )
+        self[CONF_COUNTRY_CODE] = user_response["user_info"]["phone_code"]
+    elif user_response["user_info"]["country"]:
+        self[CONF_REGION] = get_region_by_country_code(
+            user_response["user_info"]["country"]
+        )
+        self[CONF_COUNTRY_CODE] = get_phone_code_by_country_code(
+            user_response["user_info"]["country"]
+        )
+    else:
+        self[CONF_REGION] = "EU"
+        self[CONF_COUNTRY_CODE] = "44"
+
     self[CONF_TIME_ZONE] = user_response["user_info"]["timezone"]
 
     tuya_client = TuyaAPISession(
         username="eh-" + self[CONF_CLIENT_ID],
         region=self[CONF_REGION],
         timezone=self[CONF_TIME_ZONE],
+        phone_code=self[CONF_COUNTRY_CODE],
     )
 
     items = device_response["items"]
@@ -105,7 +139,6 @@ def get_eufy_vacuums(self):
         if item["device"]["product"]["appliance"] == "Cleaning":
             try:
                 device = tuya_client.get_device(item["device"]["id"])
-                _LOGGER.debug("Robovac schema: {}".format(device["schema"]))
 
                 vac_details = {
                     CONF_ID: item["device"]["id"],
@@ -120,10 +153,11 @@ def get_eufy_vacuums(self):
                 self[CONF_VACS][item["device"]["id"]] = vac_details
             except:
                 _LOGGER.debug(
-                    "Vacuum {} found on Eufy, but not on Tuya. Skipping.".format(
+                    "Skipping vacuum {}: found on Eufy but not on Tuya. Eufy details:".format(
                         item["device"]["id"]
                     )
                 )
+                _LOGGER.debug(json.dumps(item["device"], indent=2))
 
     return response
 
@@ -153,8 +187,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "cannot_connect"
         except InvalidAuth:
             errors["base"] = "invalid_auth"
-        except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception("Unexpected exception")
+        except Exception as e:  # pylint: disable=broad-except
+            _LOGGER.exception("Unexpected exception: {}".format(e))
             errors["base"] = "unknown"
         else:
             await self.async_set_unique_id(unique_id)

@@ -56,7 +56,7 @@ from homeassistant.const import (
 )
 
 from .tuyalocalapi import TuyaException
-from .const import CONF_VACS, DOMAIN, REFRESH_RATE
+from .const import CONF_VACS, DOMAIN, REFRESH_RATE, PING_RATE, TIMEOUT
 
 from .errors import getErrorMessage
 from .robovac import (
@@ -273,8 +273,8 @@ class RoboVacEntity(StateVacuumEntity):
                 device_id=self.unique_id,
                 host=self.ip_address,
                 local_key=self.access_token,
-                timeout=2,
-                ping_interval=REFRESH_RATE / 2,
+                timeout=TIMEOUT,
+                ping_interval=PING_RATE,
                 model_code=self.model_code[0:5],
                 update_entity_state=self.pushed_update_handler,
             )
@@ -316,15 +316,13 @@ class RoboVacEntity(StateVacuumEntity):
             self.update_entity_values()
         except TuyaException as e:
             self.update_failures += 1
-            _LOGGER.debug(
-                "Update errored. Current failure count: {}. Reason: {}".format(
+            _LOGGER.warn(
+                "Update errored. Current update failure count: {}. Reason: {}".format(
                     self.update_failures, e
                 )
             )
-            if self.update_failures == UPDATE_RETRIES:
-                self.update_failures = 0
+            if self.update_failures >= UPDATE_RETRIES:
                 self.error_code = "CONNECTION_FAILED"
-                raise e
 
     async def pushed_update_handler(self):
         self.update_entity_values()
@@ -359,11 +357,16 @@ class RoboVacEntity(StateVacuumEntity):
                     CONSUMABLE_CODE in self.tuyastatus
                     and self.tuyastatus.get(CONSUMABLE_CODE) is not None
                 ):
-                    self._attr_consumables = ast.literal_eval(
+                    consumables = ast.literal_eval(
                         base64.b64decode(self.tuyastatus.get(CONSUMABLE_CODE)).decode(
                             "ascii"
                         )
-                    )["consumable"]["duration"]
+                    )
+                    if (
+                        "consumable" in consumables
+                        and "duration" in consumables["consumable"]
+                    ):
+                        self._attr_consumables = consumables["consumable"]["duration"]
 
     async def async_locate(self, **kwargs):
         """Locate the vacuum cleaner."""
@@ -447,4 +450,4 @@ class RoboVacEntity(StateVacuumEntity):
             await self.vacuum.async_set({"124": base64_str})
 
     async def async_will_remove_from_hass(self):
-        await self.vacuum.async_disconnect()
+        await self.vacuum.async_disable()

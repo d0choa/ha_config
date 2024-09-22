@@ -37,7 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 class OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(CoordinatorEntity, OctopusEnergyGasSensor, RestoreSensor):
   """Sensor for displaying the previous days accumulative gas reading."""
 
-  def __init__(self, hass: HomeAssistant, client: OctopusEnergyApiClient, coordinator, meter, point, calorific_value):
+  def __init__(self, hass: HomeAssistant, client: OctopusEnergyApiClient, coordinator, account_id, meter, point, calorific_value):
     """Init sensor."""
     CoordinatorEntity.__init__(self, coordinator)
     OctopusEnergyGasSensor.__init__(self, hass, meter, point)
@@ -47,6 +47,7 @@ class OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(CoordinatorEnti
     self._native_consumption_units = meter["consumption_units"]
     self._state = None
     self._last_reset = None
+    self._account_id = account_id
     self._calorific_value = calorific_value
 
   @property
@@ -65,7 +66,7 @@ class OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(CoordinatorEnti
   @property
   def name(self):
     """Name of the sensor."""
-    return f"Gas {self._serial_number} {self._mprn} Previous Accumulative Consumption"
+    return f"Previous Accumulative Consumption Gas ({self._serial_number}/{self._mprn})"
 
   @property
   def device_class(self):
@@ -137,8 +138,7 @@ class OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(CoordinatorEnti
         consumption_and_cost["charges"],
         rate_data,
         UnitOfVolume.CUBIC_METERS,
-        "consumption_m3",
-        False
+        "consumption_m3"
       )
 
       self._state = consumption_and_cost["total_consumption_m3"]
@@ -159,11 +159,11 @@ class OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(CoordinatorEnti
         "calorific_value": self._calorific_value
       }
 
-      self._attributes["last_evaluated"] = utcnow()
-
     if result is not None:
       self._attributes["data_last_retrieved"] = result.last_retrieved
+      self._attributes["latest_available_data_timestamp"] = result.latest_available_timestamp
 
+    self._attributes = dict_to_typed_dict(self._attributes)
     super()._handle_coordinator_update()
 
   async def async_added_to_hass(self):
@@ -180,7 +180,7 @@ class OctopusEnergyPreviousAccumulativeGasConsumptionCubicMeters(CoordinatorEnti
 
   @callback
   async def async_refresh_previous_consumption_data(self, start_date):
-    """Update sensors config"""
+    """Refresh the underlying consumption data"""
 
     await async_refresh_previous_gas_consumption_data(
       self._hass,

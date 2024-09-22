@@ -168,7 +168,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00178801096e3322": {
@@ -178,7 +178,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x0017880109744f49": {
@@ -188,7 +188,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00178801097b9a3c": {
@@ -198,7 +198,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00178801097472c1": {
@@ -208,7 +208,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00178801096e46b9": {
@@ -218,7 +218,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00178801097472db": {
@@ -228,7 +228,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x0017880109744f1c": {
@@ -238,7 +238,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00178801096e3318": {
@@ -248,7 +248,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x001788010974763b": {
@@ -258,7 +258,7 @@
             "installed_version": 16786438,
             "latest_version": 16786438
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x00158d0007bef295": {
@@ -291,8 +291,8 @@
         "trigger_count": 0
     },
     "0xa4c1380094ecb55e": {
-        "temperature": 22.7,
-        "humidity": 46,
+        "temperature": 22.9,
+        "humidity": 43,
         "battery_state": "high",
         "temperature_unit": "celsius",
         "linkquality": 168
@@ -300,13 +300,13 @@
     "0x287681fffefbc1a7": {
         "temperature": 23,
         "humidity": 69,
-        "pm25": 7,
+        "pm25": 8,
         "update": {
             "state": "idle",
             "installed_version": 16777233,
             "latest_version": 16777233
         },
-        "voc_index": 142,
+        "voc_index": 143,
         "linkquality": 160
     }
 }

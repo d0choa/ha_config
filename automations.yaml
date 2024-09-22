@@ -423,37 +423,6 @@
     input:
       source_temp_sensor: sensor.salon_temperature_2
       target_tado: climate.salon
-- id: '1712516157295'
-  alias: Lavadora unemptied
-  description: ''
-  trigger:
-  - platform: numeric_state
-    entity_id: sensor.lavadora_current
-    for:
-      hours: 0
-      minutes: 3
-      seconds: 0
-    below: 0.2
-  condition:
-  - condition: state
-    entity_id: input_select.lavadora
-    state: Running
-  action:
-  - service: notify.notify
-    data:
-      title: "\U0001F455 Lavadora acabada"
-      message: La ropa esta limpia
-  - service: input_select.select_option
-    data:
-      option: Unemptied
-    target:
-      entity_id: input_select.lavadora
-  - service: grocy.add_generic
-    data:
-      entity_type: tasks
-      data:
-        name: Vaciar lavadora
-  mode: single
 - id: '1712673653480'
   alias: Bin collection message
   description: ''
